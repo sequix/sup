@@ -2,7 +2,6 @@ package config
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"os/exec"
 
@@ -32,9 +31,6 @@ func Init() {
 	if err := tf.Unmarshal(G); err != nil {
 		log.Fatal("unmarshal config: %s", err)
 	}
-
-	x, _ := tf.Marshal()
-	fmt.Println(string(x))
 
 	if len(G.ProgramConfig.Process.RestartStrategy) == 0 {
 		G.ProgramConfig.Process.RestartStrategy = RestartStrategyOnFailure
