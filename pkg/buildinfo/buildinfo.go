@@ -36,6 +36,7 @@ func printVersionAndHelp() {
 	fmt.Fprintf(flag.CommandLine.Output(), "sup -c config.toml restart # restart program\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "sup -c config.toml reload  # reload program\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "sup -c config.toml kill    # kill program\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "sup -c config.toml status  # get status of program\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "Sup Commit ID: %s\n", Commit)
 }
