@@ -37,7 +37,7 @@ path = "/bin/sleep"
 args = ["5"]
 # Working directory of the supervised process. Current directory by default.
 workDir = "./"
-# Start the process as Sup goes up.
+# Start the process as Sup goes up. False by default.
 autoStart = false
 # How to react when the supervised process went down. One of 'on-failure', 'always', 'none'. 'on-failure' by default.
 restartStrategy = "on-failure"
@@ -46,8 +46,10 @@ restartStrategy = "on-failure"
 ENV_VAR1 = "val1"
 ENV_VAR2 = "val2"
 
-# Config related with log. Log will be acquired from stdout and stderr.
+# Config related with log. Log will be acquired from stdout and stderr only.
 [program.log]
+# Path where to save the current un-rotated log. Using basename of the supervised process by default.
+path = "./tail.log"
 # Whether the rotated log files should be compressed with gzip, no compression by default.
 compress = false
 # Maximum number of days to retain old log files based on the UTC time encoded in their filename.
@@ -56,6 +58,4 @@ maxAge = 30
 maxBackups = 32
 # Maximum size in megabytes of the log file before it gets rotated. 128 MiB by default.
 maxSize = 128
-# Filename prefix of the rotated logs. Using basename of the supervised process by default.
-path = "./tail.log"
 ```
