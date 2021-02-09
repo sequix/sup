@@ -1,3 +1,6 @@
+[![Build Status](https://github.com/sequix/sup/workflows/main/badge.svg)](https://github.com/sequix/sup/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/sequix/sup)](https://goreportcard.com/report/github.com/sequix/sup)
+
 # sup
 Supervisor for single process. Supports CLI, auto-restart, log-rotate-clean based both on time and size.
 
