@@ -16,20 +16,26 @@ var (
 // Init must be called after flag.Parse call.
 func Init() {
 	if *version {
-		printVersion()
+		printVersionAndHelp()
 		os.Exit(0)
 	}
 }
 
 func init() {
-	oldUsage := flag.Usage
-	flag.Usage = func() {
-		printVersion()
-		fmt.Println()
-		oldUsage()
-	}
+	flag.Usage = printVersionAndHelp
 }
 
-func printVersion() {
+func printVersionAndHelp() {
+	fmt.Fprintf(flag.CommandLine.Output(), "Usage:\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "sup -h                     # show this message\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "sup -v                     # show this message\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "sup -c config.toml         # start sup daemon\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "sup -c config.toml start   # start program\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "sup -c config.toml stop    # stop program\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "sup -c config.toml restart # restart program\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "sup -c config.toml reload  # reload program\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "sup -c config.toml kill    # kill program\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "Sup Commit ID: %s\n", Commit)
 }

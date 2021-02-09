@@ -1,5 +1,5 @@
 # sup
-Supervisor for process in minimalism. Support features include CLI, restart, log-rotate, log-clean.
+Supervisor for single process. Supports CLI, auto-restart, log-rotate-clean based both on time and size.
 
 # Getting Started
 

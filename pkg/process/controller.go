@@ -18,8 +18,6 @@ import (
 	"github.com/sequix/sup/pkg/util"
 )
 
-// TODO: config generate, validate, default, comment
-
 type Controller struct {
 	cmd          *exec.Cmd
 	logWritePipe *io.PipeWriter
