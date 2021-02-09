@@ -1,0 +1,18 @@
+[sup]
+socket = "./sup.sock"
+
+[program]
+[program.process]
+# get flog here: https://github.com/mingrammer/flog/releases
+path = "flog"
+args = ["-l"]
+workDir = "./"
+autoStart = true
+restartStrategy = "on-failure"
+
+[program.log]
+path = "./flog.log"
+compress = false
+maxAge = 30
+maxBackups = 2
+maxSize = 128

@@ -1,16 +1,18 @@
 package process
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"os"
 	"os/exec"
 	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
 
-	"github.com/prometheus/procfs"
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/sequix/sup/pkg/config"
@@ -25,6 +27,7 @@ type Controller struct {
 	logger       *lumberjack.Logger
 	waiterCh     chan struct{}
 	wantStop     int32
+	wantExit int32
 }
 
 func (c *Controller) Start(_ *Request, _ *Response) error {
@@ -84,16 +87,22 @@ func (c *Controller) Status(_ *Request, rsp *Response) error {
 func (c *Controller) waiter(stop util.BroadcastCh) {
 	go func() {
 		<-stop
-		c.handleStop()
+		c.setWantExit()
 		close(c.waiterCh)
 	}()
 
 	for {
-		_, closed := <-c.waiterCh
+		<-c.waiterCh
+		if c.getWantExit() {
+			return
+		}
+		if c.getWantStop() {
+			continue
+		}
+
 		stat, err := c.cmd.Process.Wait()
 		if err != nil {
 			log.Error("wait error %s", err)
-			log.Info("zc: 1")
 			continue
 		}
 		log.Info("program exited: %s", stat)
@@ -104,22 +113,24 @@ func (c *Controller) waiter(stop util.BroadcastCh) {
 		if err := c.logWritePipe.Close(); err != nil {
 			log.Error("close log pipe writer: %s", err)
 		}
-		if closed {
+
+		// Wait for wantExit and wantStop set.
+		time.Sleep(300 * time.Millisecond)
+		if c.getWantExit() {
 			return
 		}
-
 		if c.getWantStop() {
-			// stopped by client, just stay at stopped
-		} else {
-			// stopped by the program, restart as config specified
-			switch processConfig.RestartStrategy {
-			case config.RestartStrategyNone:
-			case config.RestartStrategyAlways:
+			continue
+		}
+
+		// program stopped itself, restart as config specified
+		switch processConfig.RestartStrategy {
+		case config.RestartStrategyNone:
+		case config.RestartStrategyAlways:
+			c.handleStart()
+		case config.RestartStrategyOnFailure:
+			if !stat.Success() {
 				c.handleStart()
-			case config.RestartStrategyOnFailure:
-				if !stat.Success() {
-					c.handleStart()
-				}
 			}
 		}
 	}
@@ -155,12 +166,7 @@ func (c *Controller) handleRestart() (err error) {
 	if err = c.stopAction(); err != nil {
 		return err
 	}
-	for {
-		if !c.running() {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	c.waitNotRunning()
 	if err = c.startAction(); err != nil {
 		return err
 	}
@@ -203,29 +209,23 @@ func (c *Controller) handleKill() (err error) {
 
 func (c *Controller) handleStatus(rsp *Response) error {
 	if !c.running() {
-		rsp.Message = "process not running.\n"
+		rsp.Message = "NotStarted\n"
 		return nil
 	}
-
-	proc, err := procfs.NewProc(c.cmd.Process.Pid)
+	// procfs doc: https://man7.org/linux/man-pages/man5/procfs.5.html
+	pid := c.cmd.Process.Pid
+	statPath := fmt.Sprintf("/proc/%d/stat", pid)
+	statBytes, err := ioutil.ReadFile(statPath)
 	if err != nil {
-		rsp.Message = fmt.Sprintf("failed to get /pid/%d: %s", c.cmd.Process.Pid, err)
+		rsp.Message = fmt.Sprintf("failed to read %s: %s", statPath, err)
 		return nil
 	}
-
-	stat, err := proc.Stat()
-	if err != nil {
-		rsp.Message = fmt.Sprintf("failed to get /pid/%d/stat: %s", c.cmd.Process.Pid, err)
+	statFields := bytes.Split(statBytes, []byte(" "))
+	if len(statFields) < 3 {
+		rsp.Message = fmt.Sprintf("want at least 3 proc stat field, got %d", len(statFields))
 		return nil
 	}
-
-	cmdline, err := proc.CmdLine()
-	if err != nil {
-		rsp.Message = fmt.Sprintf("failed to get /pid/%d/cmdline: %s", c.cmd.Process.Pid, err)
-		return nil
-	}
-
-	rsp.Message = fmt.Sprintf("%s %d %s\n", stat.State, stat.PID, strings.Join(cmdline, " "))
+	rsp.Message = fmt.Sprintf("%s %d %s\n", string(statFields[2]), pid, strings.Join(c.cmd.Args, " "))
 	return nil
 }
 
@@ -272,6 +272,14 @@ func (c *Controller) getWantStop() bool {
 	return atomic.CompareAndSwapInt32(&c.wantStop, 1, 0)
 }
 
+func (c *Controller) setWantExit() {
+	atomic.StoreInt32(&c.wantExit, 1)
+}
+
+func (c *Controller) getWantExit() bool {
+	return atomic.CompareAndSwapInt32(&c.wantExit, 1, 0)
+}
+
 func (c *Controller) startWait() {
 	go func() { c.waiterCh <- struct{}{} }()
 }
@@ -280,14 +288,16 @@ func (c *Controller) running() bool {
 	if c.cmd.Process == nil {
 		return false
 	}
-	return c.processState() != nil
+	statPath := fmt.Sprintf("/proc/%d/stat", c.cmd.Process.Pid)
+	_, err := os.Open(statPath)
+	return err == nil
 }
 
-func (c *Controller) processState() *procfs.ProcStat {
-	proc, err := procfs.NewProc(c.cmd.Process.Pid)
-	if err != nil {
-		return nil
+func (c *Controller) waitNotRunning() {
+	for {
+		if !c.running() {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	procState, _ := proc.Stat()
-	return &procState
 }

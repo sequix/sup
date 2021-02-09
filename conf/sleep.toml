@@ -1,0 +1,9 @@
+[sup]
+socket = "./sup.sock"
+
+[program]
+[program.process]
+path = "/bin/sleep"
+args = ["5"]
+autoStart = true
+restartStrategy = "always"
