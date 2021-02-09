@@ -27,7 +27,6 @@ func init() {
 
 func printVersionAndHelp() {
 	fmt.Fprintf(flag.CommandLine.Output(), "Usage:\n")
-	fmt.Fprintf(flag.CommandLine.Output(), "\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "sup -h                     # show this message\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "sup -v                     # show this message\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "sup -c config.toml         # start sup daemon\n")
@@ -39,4 +38,6 @@ func printVersionAndHelp() {
 	fmt.Fprintf(flag.CommandLine.Output(), "sup -c config.toml status  # get status of program\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "\n")
 	fmt.Fprintf(flag.CommandLine.Output(), "Sup Commit ID: %s\n", Commit)
+	fmt.Fprintf(flag.CommandLine.Output(), "\n")
+	fmt.Fprintf(flag.CommandLine.Output(), "Check more on: https://github.com/sequix/sup\n")
 }
