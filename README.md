@@ -63,3 +63,10 @@ maxBackups = 32
 # Maximum size in megabytes of the log file before it gets rotated. 128 MiB by default.
 maxSize = 128
 ```
+
+# FAQs
+
+1.Can I reload the config of sup itself?
+
+No. I recommand you use config file to leave the config of sup immutable.
+For those using command line flags (like [VictoriaMeitrcs](https://github.com/VictoriaMetrics/VictoriaMetrics)), write a bash shell with `exec` command to execute the actual program, so that `restart` could sense the changes of flags.
