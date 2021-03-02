@@ -32,47 +32,52 @@ type Controller struct {
 
 func (c *Controller) Start(_ *Request, _ *Response) error {
 	log.Info("recv start action")
-	err := c.handleStart()
-	if err != nil {
-		log.Error(err.Error())
-	}
-	return err
+	go func() {
+		if err := c.handleStart(); err != nil {
+			log.Error(err.Error())
+		}
+	}()
+	return nil
 }
 
 func (c *Controller) Stop(_ *Request, _ *Response) error {
 	log.Info("recv stop action")
-	err := c.handleStop()
-	if err != nil {
-		log.Error(err.Error())
-	}
-	return err
+	go func() {
+		if err := c.handleStop(); err != nil {
+			log.Error(err.Error())
+		}
+	}()
+	return nil
 }
 
 func (c *Controller) Restart(_ *Request, _ *Response) error {
 	log.Info("recv restart action")
-	err := c.handleRestart()
-	if err != nil {
-		log.Error(err.Error())
-	}
-	return err
+	go func() {
+		if err := c.handleRestart(); err != nil {
+			log.Error(err.Error())
+		}
+	}()
+	return nil
 }
 
 func (c *Controller) Reload(_ *Request, _ *Response) error {
 	log.Info("recv reload action")
-	err := c.handleReload()
-	if err != nil {
-		log.Error(err.Error())
-	}
-	return err
+	go func() {
+		if err := c.handleReload(); err != nil {
+			log.Error(err.Error())
+		}
+	}()
+	return nil
 }
 
 func (c *Controller) Kill(_ *Request, _ *Response) error {
 	log.Info("recv kill action")
-	err := c.handleKill()
-	if err != nil {
-		log.Error(err.Error())
-	}
-	return err
+	go func() {
+		if err := c.handleKill(); err != nil {
+			log.Error(err.Error())
+		}
+	}()
+	return nil
 }
 
 func (c *Controller) Status(_ *Request, rsp *Response) error {
@@ -137,7 +142,6 @@ func (c *Controller) waiter(stop util.BroadcastCh) {
 }
 
 func (c *Controller) handleStart() (err error) {
-	log.Info("starting program")
 	if err = c.startAction(); err == nil {
 		log.Info("started program")
 	} else {
@@ -234,6 +238,7 @@ func (c *Controller) startAction() error {
 	if c.running() {
 		return nil
 	}
+	log.Info("starting program")
 	c.cmd.Process = nil
 	c.logReadPipe, c.logWritePipe = io.Pipe()
 	c.cmd.Stdout = c.logWritePipe
