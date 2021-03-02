@@ -20,7 +20,7 @@ type Process struct {
 	Envs            map[string]string      `toml:"envs" comment:"Environment variables to the supervised process."`
 	WorkDir         string                 `toml:"workDir" comment:"Working directory of the supervised process. Current directory by default." default:"./"`
 	AutoStart       bool                   `toml:"autoStart" comment:"Start the process as Sup goes up. False by default." default:"false"`
-	StartSeconds    int                    `toml:"startSeconds" comment:"If process kept running for 'startSeconds', Sup treat the process is booted up successfully." default:"5"`
+	StartSeconds    int                    `toml:"startSeconds" comment:"Sup waits 'startSeconds' after each start to avoid the process restarts too rapidly." default:"5"`
 	RestartStrategy ProcessRestartStrategy `toml:"restartStrategy" comment:"How to react when the supervised process went down. One of 'on-failure', 'always', 'none'. 'on-failure' by default." default:"on-failure"`
 }
 

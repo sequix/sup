@@ -43,6 +43,8 @@ args = ["5"]
 workDir = "./"
 # Start the process as Sup goes up. False by default.
 autoStart = false
+# Sup waits 'startSeconds' after each start to avoid the process restarts too rapidly.
+startSeconds = 5
 # How to react when the supervised process went down. One of 'on-failure', 'always', 'none'. 'on-failure' by default.
 restartStrategy = "on-failure"
 # Environment variables to the supervised process.
