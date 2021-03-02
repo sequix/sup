@@ -27,7 +27,7 @@ type Controller struct {
 	logger       *lumberjack.Logger
 	waiterCh     chan struct{}
 	wantStop     int32
-	wantExit int32
+	wantExit     int32
 }
 
 func (c *Controller) Start(_ *Request, _ *Response) error {
@@ -137,6 +137,7 @@ func (c *Controller) waiter(stop util.BroadcastCh) {
 }
 
 func (c *Controller) handleStart() (err error) {
+	log.Info("starting program")
 	if err = c.startAction(); err == nil {
 		log.Info("started program")
 	} else {
@@ -234,21 +235,19 @@ func (c *Controller) startAction() error {
 		return nil
 	}
 	c.cmd.Process = nil
-
 	c.logReadPipe, c.logWritePipe = io.Pipe()
 	c.cmd.Stdout = c.logWritePipe
 	c.cmd.Stderr = c.logWritePipe
-
 	go func() {
 		written, err := io.Copy(c.logger, c.logReadPipe)
 		if err != nil && !errors.Is(err, io.ErrClosedPipe) {
 			log.Error("stopped logger harvest, written %d bytes, err %s", written, err)
 		}
 	}()
-
 	if err := c.cmd.Start(); err != nil {
 		return fmt.Errorf("start command: %s", err)
 	}
+	time.Sleep(time.Duration(config.G.ProgramConfig.Process.StartSeconds) * time.Second)
 	c.startWait()
 	return nil
 }

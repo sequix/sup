@@ -66,7 +66,7 @@ func InitServer() {
 	}
 
 	if processConfig.AutoStart {
-		controller.handleStart()
+		go controller.handleStart()
 	}
 }
 
