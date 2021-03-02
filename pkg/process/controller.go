@@ -146,6 +146,7 @@ func (c *Controller) handleStart() (err error) {
 }
 
 func (c *Controller) handleStop() (err error) {
+	log.Info("starting program")
 	if err = c.stopAction(); err == nil {
 		log.Info("stopped program")
 	} else {
