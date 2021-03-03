@@ -5,5 +5,6 @@ socket = "./sup.sock"
 [program.process]
 path = "/bin/sleep"
 args = ["5"]
+startSeconds = 1
 autoStart = true
 restartStrategy = "always"

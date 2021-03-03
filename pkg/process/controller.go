@@ -40,6 +40,14 @@ func (c *Controller) Start(_ *Request, _ *Response) error {
 	return nil
 }
 
+func (c *Controller) StartWait(_ *Request, _ *Response) error {
+	log.Info("recv start-wait action")
+	if err := c.handleStart(); err != nil {
+		log.Error(err.Error())
+	}
+	return nil
+}
+
 func (c *Controller) Stop(_ *Request, _ *Response) error {
 	log.Info("recv stop action")
 	go func() {
@@ -47,6 +55,14 @@ func (c *Controller) Stop(_ *Request, _ *Response) error {
 			log.Error(err.Error())
 		}
 	}()
+	return nil
+}
+
+func (c *Controller) StopWait(_ *Request, _ *Response) error {
+	log.Info("recv stop-wait action")
+	if err := c.handleStop(); err != nil {
+		log.Error(err.Error())
+	}
 	return nil
 }
 
@@ -60,23 +76,27 @@ func (c *Controller) Restart(_ *Request, _ *Response) error {
 	return nil
 }
 
+func (c *Controller) RestartWait(_ *Request, _ *Response) error {
+	log.Info("recv restart-wait action")
+	if err := c.handleRestart(); err != nil {
+		log.Error(err.Error())
+	}
+	return nil
+}
+
 func (c *Controller) Reload(_ *Request, _ *Response) error {
 	log.Info("recv reload action")
-	go func() {
-		if err := c.handleReload(); err != nil {
-			log.Error(err.Error())
-		}
-	}()
+	if err := c.handleReload(); err != nil {
+		log.Error(err.Error())
+	}
 	return nil
 }
 
 func (c *Controller) Kill(_ *Request, _ *Response) error {
 	log.Info("recv kill action")
-	go func() {
-		if err := c.handleKill(); err != nil {
-			log.Error(err.Error())
-		}
-	}()
+	if err := c.handleKill(); err != nil {
+		log.Error(err.Error())
+	}
 	return nil
 }
 
