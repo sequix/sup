@@ -46,7 +46,6 @@ func InitServer() {
 		cmd:      cmd,
 		logger:   logger,
 		waiterCh: make(chan struct{}),
-		wantStop: 0,
 	}
 
 	server = rpc.NewServer()

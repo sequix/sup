@@ -37,10 +37,10 @@ $ ./sup -c config.toml status       # Show the process status.
 │   ├── flog-2021-03-02T09-24-12.586.log
 │   ├── flog-2021-03-02T09-59-26.709.log # rotated logs, filename encoded with UTC datetime
 │   └── flog.log                         # output of the combination of stdout and stderr of flog
-├── sup              # Sup binary
+├── sup           # Sup binary
 └── sup.d
-    ├── flog.sock  # socket the Sup CLI will connect to
-    └── flog.log   # log of Sup
+    ├── flog.sock # socket the Sup CLI will connect to
+    └── flog.log  # log of Sup
 
 # Content of flog.sh
 exec ./bin/flog -l

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -25,6 +26,7 @@ type Controller struct {
 	logWritePipe *io.PipeWriter
 	logReadPipe  *io.PipeReader
 	logger       *lumberjack.Logger
+	actionMu     sync.Mutex
 	waiterCh     chan struct{}
 	wantStop     int32
 	wantExit     int32
@@ -255,6 +257,8 @@ func (c *Controller) handleStatus(rsp *Response) error {
 }
 
 func (c *Controller) startAction() error {
+	c.actionMu.Lock()
+	defer c.actionMu.Unlock()
 	if c.running() {
 		return nil
 	}
@@ -278,6 +282,8 @@ func (c *Controller) startAction() error {
 }
 
 func (c *Controller) stopAction() error {
+	c.actionMu.Lock()
+	defer c.actionMu.Unlock()
 	if !c.running() {
 		return nil
 	}
