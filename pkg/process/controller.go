@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -252,7 +251,14 @@ func (c *Controller) handleStatus(rsp *Response) error {
 		rsp.Message = fmt.Sprintf("want at least 3 proc stat field, got %d", len(statFields))
 		return nil
 	}
-	rsp.Message = fmt.Sprintf("%s %d %s\n", string(statFields[2]), pid, strings.Join(c.cmd.Args, " "))
+	cmdlinePath := fmt.Sprintf("/proc/%d/cmdline", pid)
+	cmdline, err := ioutil.ReadFile(cmdlinePath)
+	if err != nil {
+		rsp.Message = fmt.Sprintf("failed to read %s: %s", cmdlinePath, err)
+		return nil
+	}
+	cmdline = bytes.ReplaceAll(cmdline, []byte{0}, []byte(" "))
+	rsp.Message = fmt.Sprintf("%s %d %s\n", string(statFields[2]), pid, string(cmdline))
 	return nil
 }
 
