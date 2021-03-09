@@ -110,6 +110,11 @@ func (c *Controller) Status(_ *Request, rsp *Response) error {
 	return err
 }
 
+func (c *Controller) SupPid(_ *Request, rsp *Response) error {
+	rsp.SupPid = os.Getgid()
+	return nil
+}
+
 func (c *Controller) waiter(stop util.BroadcastCh) {
 	go func() {
 		<-stop

@@ -3,6 +3,8 @@ package process
 import (
 	"fmt"
 	"net/rpc"
+	"os"
+	"syscall"
 
 	"github.com/sequix/sup/pkg/config"
 	"github.com/sequix/sup/pkg/log"
@@ -67,5 +69,20 @@ func Status() error {
 		return err
 	}
 	fmt.Print(rsp.Message)
+	return nil
+}
+
+func Exit() error {
+	rsp := &Response{}
+	if err := client.Call("Controller.SupPid", &Request{}, &rsp); err != nil {
+		return err
+	}
+	sup, err := os.FindProcess(rsp.SupPid)
+	if err != nil {
+		return fmt.Errorf("finding sup process: %s", err)
+	}
+	if err := sup.Signal(syscall.SIGTERM); err != nil {
+		return fmt.Errorf("sending SIGTERM to sup process %d: %s", rsp.SupPid, err)
+	}
 	return nil
 }
