@@ -50,10 +50,16 @@ func client() {
 	switch action := flag.Arg(0); action {
 	case process.ActionStart:
 		err = process.Start()
+	case process.ActionStartWait:
+		err = process.StartWait()
 	case process.ActionStop:
 		err = process.Stop()
+	case process.ActionStopWait:
+		err = process.StopWait()
 	case process.ActionRestart:
 		err = process.Restart()
+	case process.ActionRestartWait:
+		err = process.RestartWait()
 	case process.ActionReload:
 		err = process.Reload()
 	case process.ActionKill:
@@ -61,7 +67,7 @@ func client() {
 	case process.ActionStatus:
 		err = process.Status()
 	default:
-		fmt.Printf("unknown action %q, want one of [start, stop, kill, restart, reload, status]\n", action)
+		fmt.Printf("unknown action %q, want one of [start, start-wait, stop, stop-wait, restart, restart-wait, kill, reload, status]\n", action)
 		os.Exit(1)
 	}
 

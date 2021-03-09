@@ -3,7 +3,9 @@ package process
 import (
 	"net"
 	"net/rpc"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -26,8 +28,21 @@ func InitServer() {
 
 	cmd := exec.Command(processConfig.Path, processConfig.Args...)
 
-	envs := make([]string, 0, len(processConfig.Envs))
+	supEnvs := os.Environ()
+	envsMap := make(map[string]string, len(supEnvs)+len(processConfig.Envs))
+	for _, supEnv := range supEnvs {
+		eqi := strings.Index(supEnv, "=")
+		if eqi == -1 {
+			log.Fatal("invalid env %s", supEnv)
+		}
+		kv := strings.SplitN(supEnv, "=", 2)
+		envsMap[kv[0]] = kv[1]
+	}
 	for k, v := range processConfig.Envs {
+		envsMap[k] = v
+	}
+	envs := make([]string, 0, len(envsMap))
+	for k, v := range envsMap {
 		envs = append(envs, k+"="+v)
 	}
 	cmd.Env = envs
@@ -46,7 +61,6 @@ func InitServer() {
 		cmd:      cmd,
 		logger:   logger,
 		waiterCh: make(chan struct{}),
-		wantStop: 0,
 	}
 
 	server = rpc.NewServer()
@@ -55,6 +69,11 @@ func InitServer() {
 	}
 
 	socketPath := config.G.SupConfig.Socket
+	socketPathDir := filepath.Dir(socketPath)
+	if err := os.MkdirAll(socketPathDir, 0755); err != nil {
+		log.Fatal("mkdir %s: %s", socketPathDir, err)
+	}
+
 	ua, err := net.ResolveUnixAddr("unix", socketPath)
 	if err != nil {
 		log.Fatal("resolve unix socket path %q: %s", socketPath, err)

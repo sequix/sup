@@ -15,12 +15,55 @@ You can download the binary [here](https://github.com/sequix/sup/releases).
 $ ./sup -c config.toml
 
 # Using CLI
-$ ./sup -c config.toml status
-$ ./sup -c config.toml start
-$ ./sup -c config.toml stop
-$ ./sup -c config.toml restart
-$ ./sup -c config.toml reload
-$ ./sup -c config.toml kill
+$ ./sup -c config.toml start        # Start the process asynchronously.
+$ ./sup -c config.toml start-wait   # Wait the process to start.
+$ ./sup -c config.toml stop         # Stop the process asynchronously by sending SIGTERM(15).
+$ ./sup -c config.toml stop-wait    # Wait the process to stop.
+$ ./sup -c config.toml restart      # Restart the process asynchronously.
+$ ./sup -c config.toml restart-wait # Wait the process to restart.
+$ ./sup -c config.toml reload       # Send SIGHUP(1) to the process.
+$ ./sup -c config.toml kill         # Send SIGKILL(9) to the process.
+$ ./sup -c config.toml status       # Show the process status.
+
+# General directory format
+.
+├── bin
+│   └── flog # binary file, get it here: https://github.com/mingrammer/flog/releases
+├── conf
+│   ├── flog.sh   # command to start nginx
+│   └── flog.toml # config of Sup 
+├── log
+│   ├── flog-2021-03-02T08-54-09.711.log
+│   ├── flog-2021-03-02T09-24-12.586.log
+│   ├── flog-2021-03-02T09-59-26.709.log # rotated logs, filename encoded with UTC datetime
+│   └── flog.log                         # output of the combination of stdout and stderr of flog
+├── sup           # Sup binary
+└── sup.d
+    ├── flog.sock # socket the Sup CLI will connect to
+    └── flog.log  # log of Sup
+
+# Content of flog.sh
+exec ./bin/flog -l
+
+# Content of flog.toml
+[sup]
+socket = "./sup.d/flog.sock"  # Recommand using absolute path in production.
+
+[program]
+[program.process]
+path = "/bin/sh"
+args = ["./conf/flog.sh"]
+workDir = "./"
+startSeconds = 5
+autoStart = true
+restartStrategy = "on-failure"
+
+[program.log]
+path = "./log/flog.log"
+compress = false
+maxAge = 30
+maxBackups = 2
+maxSize = 16
 ```
 
 # Config 
@@ -72,4 +115,6 @@ maxSize = 128
 
 No. I recommand to use a config file for the program to leave the config of sup immutable.
 
-For those using command line flags (like [VictoriaMeitrcs](https://github.com/VictoriaMetrics/VictoriaMetrics)), write a bash shell with `exec` command to execute the actual program, so that `restart` could sense the changes of flags.
+For those using command line flags (like [VictoriaMeitrcs](https://github.com/VictoriaMetrics/VictoriaMetrics)), write a bash shell with `exec` command to execute the actual program,
+
+so that `restart` could sense the changes of flags, just like the example above.

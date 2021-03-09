@@ -33,12 +33,24 @@ func Start() error {
 	return client.Call("Controller.Start", &Request{}, &Response{})
 }
 
+func StartWait() error {
+	return client.Call("Controller.StartWait", &Request{}, &Response{})
+}
+
 func Stop() error {
 	return client.Call("Controller.Stop", &Request{}, &Response{})
 }
 
+func StopWait() error {
+	return client.Call("Controller.StopWait", &Request{}, &Response{})
+}
+
 func Restart() error {
 	return client.Call("Controller.Restart", &Request{}, &Response{})
+}
+
+func RestartWait() error {
+	return client.Call("Controller.RestartWait", &Request{}, &Response{})
 }
 
 func Reload() error {

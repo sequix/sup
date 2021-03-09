@@ -8,7 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -25,6 +25,7 @@ type Controller struct {
 	logWritePipe *io.PipeWriter
 	logReadPipe  *io.PipeReader
 	logger       *lumberjack.Logger
+	actionMu     sync.Mutex
 	waiterCh     chan struct{}
 	wantStop     int32
 	wantExit     int32
@@ -32,47 +33,72 @@ type Controller struct {
 
 func (c *Controller) Start(_ *Request, _ *Response) error {
 	log.Info("recv start action")
-	err := c.handleStart()
-	if err != nil {
+	go func() {
+		if err := c.handleStart(); err != nil {
+			log.Error(err.Error())
+		}
+	}()
+	return nil
+}
+
+func (c *Controller) StartWait(_ *Request, _ *Response) error {
+	log.Info("recv start-wait action")
+	if err := c.handleStart(); err != nil {
 		log.Error(err.Error())
 	}
-	return err
+	return nil
 }
 
 func (c *Controller) Stop(_ *Request, _ *Response) error {
 	log.Info("recv stop action")
-	err := c.handleStop()
-	if err != nil {
+	go func() {
+		if err := c.handleStop(); err != nil {
+			log.Error(err.Error())
+		}
+	}()
+	return nil
+}
+
+func (c *Controller) StopWait(_ *Request, _ *Response) error {
+	log.Info("recv stop-wait action")
+	if err := c.handleStop(); err != nil {
 		log.Error(err.Error())
 	}
-	return err
+	return nil
 }
 
 func (c *Controller) Restart(_ *Request, _ *Response) error {
 	log.Info("recv restart action")
-	err := c.handleRestart()
-	if err != nil {
+	go func() {
+		if err := c.handleRestart(); err != nil {
+			log.Error(err.Error())
+		}
+	}()
+	return nil
+}
+
+func (c *Controller) RestartWait(_ *Request, _ *Response) error {
+	log.Info("recv restart-wait action")
+	if err := c.handleRestart(); err != nil {
 		log.Error(err.Error())
 	}
-	return err
+	return nil
 }
 
 func (c *Controller) Reload(_ *Request, _ *Response) error {
 	log.Info("recv reload action")
-	err := c.handleReload()
-	if err != nil {
+	if err := c.handleReload(); err != nil {
 		log.Error(err.Error())
 	}
-	return err
+	return nil
 }
 
 func (c *Controller) Kill(_ *Request, _ *Response) error {
 	log.Info("recv kill action")
-	err := c.handleKill()
-	if err != nil {
+	if err := c.handleKill(); err != nil {
 		log.Error(err.Error())
 	}
-	return err
+	return nil
 }
 
 func (c *Controller) Status(_ *Request, rsp *Response) error {
@@ -226,14 +252,24 @@ func (c *Controller) handleStatus(rsp *Response) error {
 		rsp.Message = fmt.Sprintf("want at least 3 proc stat field, got %d", len(statFields))
 		return nil
 	}
-	rsp.Message = fmt.Sprintf("%s %d %s\n", string(statFields[2]), pid, strings.Join(c.cmd.Args, " "))
+	cmdlinePath := fmt.Sprintf("/proc/%d/cmdline", pid)
+	cmdline, err := ioutil.ReadFile(cmdlinePath)
+	if err != nil {
+		rsp.Message = fmt.Sprintf("failed to read %s: %s", cmdlinePath, err)
+		return nil
+	}
+	cmdline = bytes.ReplaceAll(cmdline, []byte{0}, []byte(" "))
+	rsp.Message = fmt.Sprintf("%s %d %s\n", string(statFields[2]), pid, string(cmdline))
 	return nil
 }
 
 func (c *Controller) startAction() error {
+	c.actionMu.Lock()
+	defer c.actionMu.Unlock()
 	if c.running() {
 		return nil
 	}
+	log.Info("starting program")
 	c.cmd.Process = nil
 	c.logReadPipe, c.logWritePipe = io.Pipe()
 	c.cmd.Stdout = c.logWritePipe
@@ -253,6 +289,8 @@ func (c *Controller) startAction() error {
 }
 
 func (c *Controller) stopAction() error {
+	c.actionMu.Lock()
+	defer c.actionMu.Unlock()
 	if !c.running() {
 		return nil
 	}
