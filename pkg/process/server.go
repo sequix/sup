@@ -70,12 +70,16 @@ func InitServer() {
 	}
 }
 
-func Server(stop util.BroadcastCh) {
+func Serve(stop util.BroadcastCh) {
 	waiterRw := util.Run(controller.waiter)
 	defer waiterRw.StopAndWait()
 
 	go func() {
 		<-stop
+		log.Info("stopping the program")
+		if err := controller.stopAction(); err != nil {
+			log.Error("error on stopping the program: %s", err)
+		}
 		if err := unixListener.Close(); err != nil {
 			log.Error("close socket listener: %s", err)
 		}

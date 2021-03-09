@@ -32,7 +32,7 @@ func main() {
 
 func server() {
 	process.InitServer()
-	serverRw := util.Run(process.Server)
+	serverRw := util.Run(process.Serve)
 	log.Info("Sup daemon inited")
 
 	stop.Wait()
@@ -45,6 +45,7 @@ func server() {
 func client() {
 	var err error
 	process.InitClient()
+	defer process.ClientClose()
 
 	switch action := flag.Arg(0); action {
 	case process.ActionStart:
