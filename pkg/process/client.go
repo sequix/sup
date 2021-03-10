@@ -5,6 +5,7 @@ import (
 	"net/rpc"
 	"os"
 	"syscall"
+	"time"
 
 	"github.com/sequix/sup/pkg/config"
 	"github.com/sequix/sup/pkg/log"
@@ -85,4 +86,21 @@ func Exit() error {
 		return fmt.Errorf("sending SIGTERM to sup process %d: %s", rsp.SupPid, err)
 	}
 	return nil
+}
+
+func ExitWait() error {
+	if err := Exit(); err != nil {
+		return err
+	}
+	socketPath := config.G.SupConfig.Socket
+	for {
+		_, err := os.Stat(socketPath)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("stat socket %s: %s", socketPath, err)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }

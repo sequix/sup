@@ -25,6 +25,7 @@ $ ./sup -c config.toml reload       # Send SIGHUP(1) to the process.
 $ ./sup -c config.toml kill         # Send SIGKILL(9) to the process.
 $ ./sup -c config.toml status       # Show the process status.
 $ ./sup -c config.toml exit         # Exit the Sup daemon and the process asynchronously.
+$ ./sup -c config.toml exit-wait    # Wait the Sup daemon and the process to exit.
 
 # General directory format
 .

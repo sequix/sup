@@ -19,4 +19,5 @@ const (
 	ActionReload      = "reload"
 	ActionStatus      = "status"
 	ActionExit        = "exit"
+	ActionExitWait    = "exit-wait"
 )

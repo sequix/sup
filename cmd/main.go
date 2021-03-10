@@ -68,8 +68,10 @@ func client() {
 		err = process.Status()
 	case process.ActionExit:
 		err = process.Exit()
+	case process.ActionExitWait:
+		err = process.ExitWait()
 	default:
-		fmt.Printf("unknown action %q, want one of [start, start-wait, stop, stop-wait, restart, restart-wait, kill, reload, status, exit]\n", action)
+		fmt.Printf("unknown action %q, want one of [start, start-wait, stop, stop-wait, restart, restart-wait, kill, reload, status, exit, exit-wait]\n", action)
 		os.Exit(1)
 	}
 
