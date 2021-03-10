@@ -111,7 +111,7 @@ func (c *Controller) Status(_ *Request, rsp *Response) error {
 }
 
 func (c *Controller) SupPid(_ *Request, rsp *Response) error {
-	rsp.SupPid = os.Getgid()
+	rsp.SupPid = os.Getpid()
 	return nil
 }
 
