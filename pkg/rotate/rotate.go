@@ -245,7 +245,7 @@ func (w *FileWriter) gzipMerge() {
 	)
 	for _, fi := range fis {
 		if curBytes + fi.Size() >= w.maxBytes && len(toMerge) > 0 {
-			if err := w.mergeToFirst(dir, append(toMerge, fi)); err != nil {
+			if err := w.mergeToFirstRenameToLast(dir, append(toMerge, fi)); err != nil {
 				log.Error(err.Error())
 				return
 			}
@@ -258,7 +258,7 @@ func (w *FileWriter) gzipMerge() {
 	}
 }
 
-func (w *FileWriter) mergeToFirst(dir string, toMerge []os.FileInfo) error {
+func (w *FileWriter) mergeToFirstRenameToLast(dir string, toMerge []os.FileInfo) error {
 	logErr := func(err error) {
 		if err != nil {
 			log.Error("error on merging gzips: %s", err)
@@ -293,7 +293,8 @@ func (w *FileWriter) mergeToFirst(dir string, toMerge []os.FileInfo) error {
 			return err
 		}
 	}
-	return nil
+	newDstFilename := filepath.Join(dir, toMerge[len(toMerge)-1].Name())
+	return os.Rename(dstFilename, newDstFilename)
 }
 
 func (w *FileWriter) cleanExtraBackups() {
@@ -337,7 +338,7 @@ func (w *FileWriter) listBackups() ([]os.FileInfo, error) {
 		}
 	}
 	sort.Slice(matches, func(i, j int) bool {
-		return matches[i].ModTime().Unix() < matches[j].ModTime().Unix()
+		return matches[i].Name() < matches[j].Name()
 	})
 	return matches, nil
 }
