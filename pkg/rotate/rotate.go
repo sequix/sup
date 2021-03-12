@@ -209,13 +209,13 @@ func (w *FileWriter) rotateBackground(rotatedFilename string) {
 func (w *FileWriter) gzip(srcFilename string) {
 	src, err := os.OpenFile(srcFilename, os.O_RDONLY|os.O_EXCL, 0644)
 	if err != nil {
-		log.Error("open file %s: %s", srcFilename, err)
+		log.Error("gzip open src file %s: %s", srcFilename, err)
 		return
 	}
 	dstFilename := srcFilename + ".gz"
 	dst, err := os.OpenFile(dstFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Error("open file %s: %s", dstFilename, err)
+		log.Error("gzip open dst file %s: %s", dstFilename, err)
 		return
 	}
 	if _, err = w.gzipCopyClose(src, dst); err != nil {
