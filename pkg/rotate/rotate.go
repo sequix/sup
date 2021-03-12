@@ -181,39 +181,45 @@ func (w *FileWriter) rotate() error {
 	if w.file == nil {
 		return nil
 	}
-	rotatedFile := w.file
-	rotatedFilename := w.rotatedFilename(timeNow())
+	if err := w.file.Close(); err != nil {
+		return err
+	}
 	w.file = nil
 	w.size = 0
+
+	rotatedFilename := w.rotatedFilename(timeNow())
 
 	if err := os.Rename(w.filename, rotatedFilename); err != nil {
 		return err
 	}
-
-	go w.rotateBackground(rotatedFile, rotatedFilename)
-
+	go w.rotateBackground(rotatedFilename)
 	return nil
 }
 
-func (w *FileWriter) rotateBackground(rotatedFile *os.File, rotatedFilename string) {
+func (w *FileWriter) rotateBackground(rotatedFilename string) {
 	w.backMu.Lock()
 	if w.compress {
-		w.gzip(rotatedFile, rotatedFilename)
+		w.gzip(rotatedFilename)
 		w.gzipMerge()
 	}
 	w.cleanExtraBackups()
 	w.backMu.Unlock()
 }
 
-func (w *FileWriter) gzip(rotatedFile *os.File, rotatedFilename string) {
-	gzFilename := rotatedFilename + ".gz"
-	gzfw, err := os.OpenFile(gzFilename, os.O_RDONLY|os.O_EXCL, 0644)
+func (w *FileWriter) gzip(srcFilename string) {
+	src, err := os.OpenFile(srcFilename, os.O_RDONLY|os.O_EXCL, 0644)
 	if err != nil {
-		log.Error("open file %s: %s", gzFilename, err)
+		log.Error("open file %s: %s", srcFilename, err)
 		return
 	}
-	if _, err = w.gzipCopyClose(rotatedFile, gzfw); err != nil {
-		log.Error("gzip file %s: %s", gzFilename, err)
+	dstFilename := srcFilename + ".gz"
+	dst, err := os.OpenFile(dstFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Error("open file %s: %s", dstFilename, err)
+		return
+	}
+	if _, err = w.gzipCopyClose(src, dst); err != nil {
+		log.Error("gzip file %s: %s", dstFilename, err)
 		return
 	}
 }
@@ -241,10 +247,10 @@ func (w *FileWriter) gzipMerge() {
 	}
 	var (
 		curBytes int64
-		toMerge []os.FileInfo
+		toMerge  []os.FileInfo
 	)
 	for _, fi := range fis {
-		if curBytes + fi.Size() >= w.maxBytes && len(toMerge) > 0 {
+		if curBytes+fi.Size() >= w.maxBytes && len(toMerge) > 0 {
 			if err := w.mergeToFirstRenameToLast(dir, append(toMerge, fi)); err != nil {
 				log.Error(err.Error())
 				return
