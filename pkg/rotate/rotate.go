@@ -258,6 +258,44 @@ func (w *FileWriter) gzipMerge() {
 	}
 }
 
+func (w *FileWriter) mergeToFirst(dir string, toMerge []os.FileInfo) error {
+	logErr := func(err error) {
+		if err != nil {
+			log.Error("error on merging gzips: %s", err)
+		}
+	}
+
+	dstFi := toMerge[0]
+	dstFilename := filepath.Join(dir, dstFi.Name())
+	dst, err := os.OpenFile(dstFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("open file %s: %s", dstFilename, err)
+	}
+	defer logErr(dst.Close())
+
+	for _, srcFi := range toMerge[1:] {
+		srcFilename := filepath.Join(dir, srcFi.Name())
+		err := func() error {
+			src, err := os.OpenFile(srcFilename, os.O_EXCL|os.O_RDONLY, 0644)
+			if err != nil {
+				return fmt.Errorf("open file %s: %s", dstFilename, err)
+			}
+			defer logErr(src.Close())
+			if written, err := io.Copy(dst, src); err != nil {
+				return fmt.Errorf("append gzip: written %d, err %s", written, err)
+			}
+			if err := os.Remove(srcFilename); err != nil {
+				return fmt.Errorf("remove %s: %s", srcFilename)
+			}
+			return nil
+		}()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (w *FileWriter) cleanExtraBackups() {
 	dir := filepath.Dir(w.filename)
 	fis, err := w.listBackups()
@@ -302,44 +340,6 @@ func (w *FileWriter) listBackups() ([]os.FileInfo, error) {
 		return matches[i].ModTime().Unix() < matches[j].ModTime().Unix()
 	})
 	return matches, nil
-}
-
-func (w *FileWriter) mergeToFirst(dir string, toMerge []os.FileInfo) error {
-	logErr := func(err error) {
-		if err != nil {
-			log.Error("error on merging gzips: %s", err)
-		}
-	}
-
-	dstFi := toMerge[0]
-	dstFilename := filepath.Join(dir, dstFi.Name())
-	dst, err := os.OpenFile(dstFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("open file %s: %s", dstFilename, err)
-	}
-	defer logErr(dst.Close())
-
-	for _, srcFi := range toMerge[1:] {
-		srcFilename := filepath.Join(dir, srcFi.Name())
-		err := func() error {
-			src, err := os.OpenFile(srcFilename, os.O_EXCL|os.O_RDONLY, 0644)
-			if err != nil {
-				return fmt.Errorf("open file %s: %s", dstFilename, err)
-			}
-			defer logErr(src.Close())
-			if written, err := io.Copy(dst, src); err != nil {
-				return fmt.Errorf("append gzip: written %d, err %s", written, err)
-			}
-			if err := os.Remove(srcFilename); err != nil {
-				return fmt.Errorf("remove %s: %s", srcFilename)
-			}
-			return nil
-		}()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // rotatedFilename returns a new filename based on the original name and the given time.
