@@ -137,7 +137,12 @@ func (w *FileWriter) write(p []byte) (n int, err error) {
 		if err != nil {
 			return
 		}
-		w.size = 0
+		var stat os.FileInfo
+		stat, err = w.file.Stat()
+		if err != nil {
+			return
+		}
+		w.size = stat.Size()
 	}
 
 	n, err = w.file.Write(p)
@@ -291,7 +296,7 @@ func (w *FileWriter) mergeToFirstRenameToLast(dir string, toMerge []os.FileInfo)
 				return fmt.Errorf("append gzip: written %d, err %s", written, err)
 			}
 			if err := os.Remove(srcFilename); err != nil {
-				return fmt.Errorf("remove %s: %s", srcFilename)
+				return fmt.Errorf("remove %s: %s", srcFilename, err)
 			}
 			return nil
 		}()
@@ -354,5 +359,6 @@ func (w *FileWriter) rotatedFilename(now time.Time) string {
 	now = now.UTC()
 	ext := filepath.Ext(w.filename)
 	prefix := w.filename[:len(w.filename)-len(ext)]
-	return prefix + now.Format("2006-01-02T15-04-05-999Z") + ext
+	ts := now.Format("2006-01-02T15-04-05.000Z")
+	return prefix + "." + strings.ReplaceAll(ts, ".", "-")  + ext
 }
