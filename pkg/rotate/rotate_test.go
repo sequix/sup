@@ -81,29 +81,29 @@ func Test(t *testing.T) {
 	// clean when reach backups limit
 	// restart program
 
-	//log.Init()
-	//
-	//fw, err := NewFileWriter(WithFilename("test.log"),
-	//	WithCompress(true),
-	//	WithMaxBackups(3),
-	//	WithMaxBytes(1*1024*1024),
-	//	WithMergeCompressedBackups(true))
-	//if err != nil {
-	//	panic(err)
-	//}
-	//defer fw.Close()
-	//
-	//fg := flog{
-	//	interval: time.Millisecond * 1,
-	//	w:        fw,
-	//}
-	//
-	//stop := make(chan struct{})
-	//
-	//go fg.run(stop)
-	//
-	//time.Sleep(5 * time.Minute)
-	//close(stop)
+	log.Init()
+
+	fw, err := NewFileWriter(WithFilename("test.log"),
+		WithCompress(true),
+		WithMaxBackups(3),
+		WithMaxBytes(1*1024*1024),
+		WithMergeCompressedBackups(true))
+	if err != nil {
+		panic(err)
+	}
+	defer fw.Close()
+
+	fg := flog{
+		interval: time.Millisecond * 1,
+		w:        fw,
+	}
+
+	stop := make(chan struct{})
+
+	go fg.run(stop)
+
+	time.Sleep(5 * time.Minute)
+	close(stop)
 
 	// delete backups after the last log of a backup beyond max age
 

@@ -276,8 +276,7 @@ func (w *FileWriter) gzipMerge() {
 		toMerge  []os.FileInfo
 	)
 	for _, fi := range fis {
-		// TODO HERE
-		if curBytes+fi.Size() > w.maxBytes {
+		if curBytes+fi.Size() >= w.maxBytes {
 			if len(toMerge) > 1 {
 				if err := w.mergeToFirstRenameToLast(dir, toMerge); err != nil {
 					log.Error(err.Error())

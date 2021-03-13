@@ -104,7 +104,7 @@ path = "./tail.log"
 # Whether the rotated log files should be compressed with gzip, no compression by default.
 compress = false
 # Whether the gzipped backups would be merged or not, no merging by default.
-mergeCompressed = true
+mergeCompressed = false
 # Maximum duration to retain old log files based on the UTC time encoded in their filename.
 maxAge = "30d"
 # Maximum number of old log files to retain. Retaining all old log files by default.
@@ -119,6 +119,6 @@ maxSize = 128
 
 No. I recommand to use a config file for the program to leave the config of sup immutable.
 
-For those using command line flags (like [VictoriaMeitrcs](https://github.com/VictoriaMetrics/VictoriaMetrics)), write a bash shell with `exec` command to execute the actual program,
+For those using command line flags (like [VictoriaMetrics](https://github.com/VictoriaMetrics/VictoriaMetrics)), write a bash shell with `exec` command to execute the actual program,
 
 so that `restart` could sense the changes of flags, just like the example above.
