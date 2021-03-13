@@ -61,7 +61,6 @@ type FileWriter struct {
 	backMu sync.Mutex
 	size   int64
 	file   *os.File
-	gw     gzip.Writer
 }
 
 type Option func(*FileWriter)
@@ -212,7 +211,7 @@ func (w *FileWriter) rotateBackground(rotatedFilename string) {
 }
 
 func (w *FileWriter) gzip(srcFilename string) {
-	src, err := os.OpenFile(srcFilename, os.O_RDONLY|os.O_EXCL, 0644)
+	src, err := os.OpenFile(srcFilename, os.O_RDONLY, 0644)
 	if err != nil {
 		log.Error("gzip open src file %s: %s", srcFilename, err)
 		return
@@ -227,6 +226,10 @@ func (w *FileWriter) gzip(srcFilename string) {
 		log.Error("gzip file %s: %s", dstFilename, err)
 		return
 	}
+	if err := os.Remove(srcFilename); err != nil {
+		log.Error("remove file %s: %s", srcFilename, err)
+		return
+	}
 }
 
 func (w *FileWriter) gzipCopyClose(src io.ReadCloser, dst io.WriteCloser) (written int64, err error) {
@@ -235,9 +238,9 @@ func (w *FileWriter) gzipCopyClose(src io.ReadCloser, dst io.WriteCloser) (writt
 			log.Error("error on gzip: %s", err)
 		}
 	}
-	w.gw.Reset(dst)
-	written, err = io.Copy(&w.gw, src)
-	logErr(w.gw.Close())
+	gw := gzip.NewWriter(dst)
+	written, err = io.Copy(gw, src)
+	logErr(gw.Close())
 	logErr(dst.Close())
 	logErr(src.Close())
 	return
@@ -267,6 +270,12 @@ func (w *FileWriter) gzipMerge() {
 		toMerge = append(toMerge, fi)
 		curBytes += fi.Size()
 	}
+	if len(toMerge) > 1 {
+		if err := w.mergeToFirstRenameToLast(dir, toMerge); err != nil {
+			log.Error(err.Error())
+			return
+		}
+	}
 }
 
 func (w *FileWriter) mergeToFirstRenameToLast(dir string, toMerge []os.FileInfo) error {
@@ -275,37 +284,36 @@ func (w *FileWriter) mergeToFirstRenameToLast(dir string, toMerge []os.FileInfo)
 			log.Error("error on merging gzips: %s", err)
 		}
 	}
-
 	dstFi := toMerge[0]
 	dstFilename := filepath.Join(dir, dstFi.Name())
-	dst, err := os.OpenFile(dstFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	dst, err := os.OpenFile(dstFilename, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("open file %s: %s", dstFilename, err)
 	}
 	defer logErr(dst.Close())
 
 	for _, srcFi := range toMerge[1:] {
-		srcFilename := filepath.Join(dir, srcFi.Name())
-		err := func() error {
-			src, err := os.OpenFile(srcFilename, os.O_EXCL|os.O_RDONLY, 0644)
-			if err != nil {
-				return fmt.Errorf("open file %s: %s", dstFilename, err)
-			}
-			defer logErr(src.Close())
-			if written, err := io.Copy(dst, src); err != nil {
-				return fmt.Errorf("append gzip: written %d, err %s", written, err)
-			}
-			if err := os.Remove(srcFilename); err != nil {
-				return fmt.Errorf("remove %s: %s", srcFilename, err)
-			}
-			return nil
-		}()
-		if err != nil {
+		if err := w.appendFile(dst, filepath.Join(dir, srcFi.Name())); err != nil {
 			return err
 		}
 	}
 	newDstFilename := filepath.Join(dir, toMerge[len(toMerge)-1].Name())
 	return os.Rename(dstFilename, newDstFilename)
+}
+
+func (w *FileWriter) appendFile(dst io.Writer, srcFilename string) error {
+	src, err := os.OpenFile(srcFilename, os.O_RDONLY, 0)
+	if err != nil {
+		return fmt.Errorf("open file %s: %s", srcFilename, err)
+	}
+	defer src.Close()
+	if written, err := io.Copy(dst, src); err != nil {
+		return fmt.Errorf("append gzip: written %d, err %s", written, err)
+	}
+	if err := os.Remove(srcFilename); err != nil {
+		return fmt.Errorf("remove %s: %s", srcFilename, err)
+	}
+	return nil
 }
 
 func (w *FileWriter) cleanExtraBackups() {
