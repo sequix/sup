@@ -13,10 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"gopkg.in/natefinch/lumberjack.v2"
-
 	"github.com/sequix/sup/pkg/config"
 	"github.com/sequix/sup/pkg/log"
+	"github.com/sequix/sup/pkg/rotate"
 	"github.com/sequix/sup/pkg/util"
 )
 
@@ -24,11 +23,21 @@ type Controller struct {
 	cmd          *exec.Cmd
 	logWritePipe *io.PipeWriter
 	logReadPipe  *io.PipeReader
-	logger       *lumberjack.Logger
+	logger       *rotate.FileWriter
 	actionMu     sync.Mutex
 	waiterCh     chan struct{}
 	wantStop     int32
 	wantExit     int32
+}
+
+func (c *Controller) close() {
+	log.Info("stopping the program")
+	if err := controller.stopAction(); err != nil {
+		log.Error("stop the program: %s", err)
+	}
+	if err := c.logger.Close(); err != nil {
+		log.Error("stop the rotate logger: %s", err)
+	}
 }
 
 func (c *Controller) Start(_ *Request, _ *Response) error {

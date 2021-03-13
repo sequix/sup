@@ -1,5 +1,7 @@
 package config
 
+import "time"
+
 type Config struct {
 	SupConfig     Sup     `toml:"sup" comment:"Config related with Sup."`
 	ProgramConfig Program `toml:"program" comment:"Config related with the supervised process."`
@@ -34,9 +36,10 @@ const (
 )
 
 type Log struct {
-	Path       string `toml:"path" comment:"Path where to save the current un-rotated log. Using basename of the supervised process by default."`
-	MaxSize    int    `toml:"maxSize" comment:"Maximum size in megabytes of the log file before it gets rotated. 128 MiB by default." default:"128"`
-	MaxAge     int    `toml:"maxAge" comment:"Maximum number of days to retain old log files based on the UTC time encoded in their filename. 30 by default." default:"30"`
-	MaxBackups int    `toml:"maxBackups" comment:"Maximum number of old log files to retain. Retaining all old log files by default. 32 by default." default:"32"`
-	Compress   bool   `toml:"compress" comment:"Whether the rotated log files should be compressed with gzip, no compression by default." default:"false"`
+	Path            string        `toml:"path" comment:"Path where to save the current un-rotated log. Using basename of the supervised process by default."`
+	MaxSize         int           `toml:"maxSize" comment:"Maximum size in MiB of the log file before it gets rotated. 128 MiB by default." default:"134217728"`
+	MaxAge          time.Duration `toml:"maxAge" comment:"Maximum duration to retain old log files based on the UTC time encoded in their filename. unlimited by default." default:"0s"`
+	MaxBackups      int           `toml:"maxBackups" comment:"Maximum number of old log files to retain. Retaining all old log files by default. 32 by default." default:"32"`
+	Compress        bool          `toml:"compress" comment:"Whether the rotated log files should be compressed with gzip, no compression by default." default:"false"`
+	MergeCompressed bool          `toml:"mergeCompressed" comment:"Whether the gzipped backups should be merged, no by default." default:"false"`
 }

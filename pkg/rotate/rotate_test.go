@@ -1,13 +1,11 @@
 package rotate
 
 import (
+	"fmt"
 	"io"
 	"math/rand"
-	"os"
 	"testing"
 	"time"
-
-	"github.com/davecgh/go-spew/spew"
 
 	"github.com/sequix/sup/pkg/log"
 )
@@ -29,7 +27,7 @@ func randString(n int) string {
 
 type flog struct {
 	interval time.Duration
-	w io.WriteCloser
+	w        io.WriteCloser
 }
 
 func (f *flog) run(stop chan struct{}) {
@@ -40,7 +38,7 @@ func (f *flog) run(stop chan struct{}) {
 		case <-stop:
 			return
 		case <-ticker.C:
-			line := randString(rand.Intn(80000))
+			line := randString(rand.Intn(1000000))
 			written, err := f.w.Write([]byte(line))
 			if err != nil {
 				log.Error("write log: written %d bytes, error %s", written, err)
@@ -83,37 +81,68 @@ func Test(t *testing.T) {
 	// clean when reach backups limit
 	// restart program
 
-	log.Init()
-
-	fw, err := NewFileWriter(WithFilename("test.log"),
-		WithCompress(true),
-		WithMaxBackups(2),
-		WithMaxBytes(2 * 1024 * 1024))
-	if err != nil {
-		panic(err)
-	}
-	defer fw.Close()
-
-	fg := flog{
-		interval: time.Millisecond * 20,
-		w:        fw,
-	}
-
-	stop := make(chan struct{})
-
-	go fg.run(stop)
-
-	time.Sleep(5 * time.Minute)
-	close(stop)
+	//log.Init()
+	//
+	//fw, err := NewFileWriter(WithFilename("test.log"),
+	//	WithCompress(true),
+	//	WithMaxBackups(3),
+	//	WithMaxBytes(1*1024*1024),
+	//	WithMergeCompressedBackups(true))
+	//if err != nil {
+	//	panic(err)
+	//}
+	//defer fw.Close()
+	//
+	//fg := flog{
+	//	interval: time.Millisecond * 1,
+	//	w:        fw,
+	//}
+	//
+	//stop := make(chan struct{})
+	//
+	//go fg.run(stop)
+	//
+	//time.Sleep(5 * time.Minute)
+	//close(stop)
 
 	// delete backups after the last log of a backup beyond max age
+
+	//log.Init()
+	//
+	//fw, err := NewFileWriter(WithFilename("test.log"),
+	//	WithCompress(true),
+	//	WithMaxBackups(3),
+	//	WithMaxBytes(1*1024*1024),
+	//	WithMergeCompressedBackups(true),
+	//	WithMaxAge(time.Minute))
+	//if err != nil {
+	//	panic(err)
+	//}
+	//defer fw.Close()
+	//
+	//fg := flog{
+	//	interval: time.Millisecond * 1,
+	//	w:        fw,
+	//}
+	//
+	//stop := make(chan struct{})
+	//
+	//go fg.run(stop)
+	//
+	//time.Sleep(5 * time.Minute)
+	//close(stop)
 }
 
-func Test2(t *testing.T) {
-	f1, _ := os.OpenFile("1", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	f2, _ := os.OpenFile("2", os.O_RDONLY, 0644)
-	defer f1.Close()
-	defer f2.Close()
+func Test4(t *testing.T) {
+	counter := 0
 
-	spew.Dump(io.Copy(f1, f2))
+	print := func(msg string) string {
+		fmt.Println(msg)
+		counter++
+		return fmt.Sprintf("%d: %s\n", counter, msg)
+	}
+
+	print("msg1")
+	defer print(print("defer msg1"))
+	print("msg2")
 }

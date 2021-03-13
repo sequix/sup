@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,29 +13,12 @@ import (
 	"time"
 
 	"github.com/sequix/sup/pkg/log"
+	"github.com/sequix/sup/pkg/util"
 )
 
 // for unit test
 var timeNow = time.Now
 
-// FileWriter is an Writer that writes to the specified filename.
-//
-// Backups use the log file name given to FileWriter, in the form
-// `name.timestamp.ext` where name is the filename without the extension,
-// timestamp is the time at which the log was rotated formatted with the
-// time.Time format of `2006-01-02T15-04-05` and the extension is the
-// original extension.  For example, if your FileWriter.filename is
-// `/var/log/foo/server.log`, a backup created at 6:30pm on Nov 11 2016 would
-// use the filename `/var/log/foo/server.2016-11-04T18-30-00.log`
-//
-// Cleaning Up Old Log Files
-//
-// Whenever a new logfile gets created, old log files may be deleted.  The most
-// recent files according to filesystem modified time will be retained, up to a
-// number equal to maxBackups (or all of them if maxBackups is 0).  Any files
-// with an encoded timestamp older than maxAge days are deleted, regardless of
-// maxBackups.  Note that the time encoded in the timestamp is the rotation
-// time, which may differ from the last time that file was written to.
 type FileWriter struct {
 	// filename is the file to write logs to.  Backup log files will be retained
 	// in the same directory.
@@ -48,9 +32,13 @@ type FileWriter struct {
 	// is to retain all old log files.
 	maxBackups int
 
-	// compress is the switch to let you control if the log is compressed with gzipCopyClose.
+	// compress decides whether the log is compressed with gzip.
 	// The default is not to compress.
 	compress bool
+
+	// mergeCompressedBackups decides whether the gzip backups is merged if they below maxBytes.
+	// The default is not to merge.
+	mergeCompressedBackups bool
 
 	// maxAge is the maximum duration of old log files to retain. The default
 	// is to retain all old log files.
@@ -61,6 +49,7 @@ type FileWriter struct {
 	backMu sync.Mutex
 	size   int64
 	file   *os.File
+	stop   *util.RunWrapper
 }
 
 type Option func(*FileWriter)
@@ -73,8 +62,6 @@ func WithFilename(filename string) Option {
 
 func WithMaxBytes(maxBytes int64) Option {
 	return func(w *FileWriter) {
-		if maxBytes <= 0 {
-		}
 		w.maxBytes = maxBytes
 	}
 }
@@ -88,6 +75,12 @@ func WithMaxBackups(maxBackups int) Option {
 func WithCompress(compress bool) Option {
 	return func(w *FileWriter) {
 		w.compress = compress
+	}
+}
+
+func WithMergeCompressedBackups(merge bool) Option {
+	return func(w *FileWriter) {
+		w.mergeCompressedBackups = merge
 	}
 }
 
@@ -111,7 +104,9 @@ func NewFileWriter(opts ...Option) (*FileWriter, error) {
 	if fw.maxBytes <= 0 {
 		return nil, fmt.Errorf("expected maxBytes >= 0, got %d", fw.maxBytes)
 	}
-	// TODO maxAge
+	if fw.maxAge > 0 {
+		fw.stop = util.Run(fw.ager)
+	}
 	return fw, nil
 }
 
@@ -119,7 +114,7 @@ var _ io.WriteCloser = (*FileWriter)(nil)
 
 // Write implements io.Writer.  If a write would cause the log file to be larger
 // than maxBytes, the file is closed, rotate to include a timestamp of the
-// current time, and update symlink with log name file to the new file.
+// current time.
 func (w *FileWriter) Write(p []byte) (n int, err error) {
 	w.mu.Lock()
 	n, err = w.write(p)
@@ -160,25 +155,51 @@ func (w *FileWriter) write(p []byte) (n int, err error) {
 // Close implements io.Closer, and closes the current logfile.
 func (w *FileWriter) Close() (err error) {
 	w.mu.Lock()
+	w.backMu.Lock()
 	if w.file != nil {
 		err = w.file.Close()
 		w.file = nil
 		w.size = 0
 	}
+	if w.stop != nil {
+		w.stop.StopAndWait()
+	}
+	w.backMu.Unlock()
 	w.mu.Unlock()
 	return
 }
 
-// Rotate causes Logger to close the existing log file and immediately create a
-// new one.  This is a helper function for applications that want to initiate
-// rotations outside of the normal rotation rules, such as in response to
-// SIGHUP.  After rotating, this initiates compression and removal of old log
-// files according to the configuration.
-func (w *FileWriter) Rotate() (err error) {
-	w.mu.Lock()
-	err = w.rotate()
-	w.mu.Unlock()
-	return
+func (w *FileWriter) ager(stop util.BroadcastCh) {
+	ticker := time.NewTicker(time.Minute)
+	for {
+		select {
+		case <-stop:
+			ticker.Stop()
+			return
+		case now := <-ticker.C:
+			w.backMu.Lock()
+			w.cleanAgedBackups(now)
+			w.backMu.Unlock()
+		}
+	}
+}
+
+func (w *FileWriter) cleanAgedBackups(now time.Time) {
+	dir := filepath.Dir(w.filename)
+	fis, err := w.listBackups()
+	if err != nil {
+		log.Error(err.Error())
+		return
+	}
+	for _, fi := range fis {
+		backupNow := w.parseTimeFromBackup(fi.Name())
+		if now.Sub(backupNow) > w.maxAge {
+			filename := filepath.Join(dir, fi.Name())
+			if err := os.Remove(filename); err != nil {
+				log.Error("remove %s: %s", filename, err)
+			}
+		}
+	}
 }
 
 func (w *FileWriter) rotate() error {
@@ -204,7 +225,9 @@ func (w *FileWriter) rotateBackground(rotatedFilename string) {
 	w.backMu.Lock()
 	if w.compress {
 		w.gzip(rotatedFilename)
-		w.gzipMerge()
+		if w.mergeCompressedBackups {
+			w.gzipMerge()
+		}
 	}
 	w.cleanExtraBackups()
 	w.backMu.Unlock()
@@ -233,16 +256,11 @@ func (w *FileWriter) gzip(srcFilename string) {
 }
 
 func (w *FileWriter) gzipCopyClose(src io.ReadCloser, dst io.WriteCloser) (written int64, err error) {
-	logErr := func(err error) {
-		if err != nil {
-			log.Error("error on gzip: %s", err)
-		}
-	}
 	gw := gzip.NewWriter(dst)
 	written, err = io.Copy(gw, src)
-	logErr(gw.Close())
-	logErr(dst.Close())
-	logErr(src.Close())
+	log.ErrorFunc(gw.Close, "gzip")
+	log.ErrorFunc(dst.Close, "gzip")
+	log.ErrorFunc(src.Close, "gzip")
 	return
 }
 
@@ -258,19 +276,23 @@ func (w *FileWriter) gzipMerge() {
 		toMerge  []os.FileInfo
 	)
 	for _, fi := range fis {
-		if curBytes+fi.Size() >= w.maxBytes && len(toMerge) > 0 {
-			if err := w.mergeToFirstRenameToLast(dir, append(toMerge, fi)); err != nil {
-				log.Error(err.Error())
-				return
+		// TODO HERE
+		if curBytes+fi.Size() > w.maxBytes {
+			if len(toMerge) > 1 {
+				if err := w.mergeToFirstRenameToLast(dir, toMerge); err != nil {
+					log.Error(err.Error())
+					return
+				}
 			}
 			curBytes = 0
 			toMerge = nil
-			continue
 		}
-		toMerge = append(toMerge, fi)
-		curBytes += fi.Size()
+		if fi.Size() < w.maxBytes {
+			toMerge = append(toMerge, fi)
+			curBytes += fi.Size()
+		}
 	}
-	if len(toMerge) > 1 {
+	if curBytes <= w.maxBytes && len(toMerge) > 1 {
 		if err := w.mergeToFirstRenameToLast(dir, toMerge); err != nil {
 			log.Error(err.Error())
 			return
@@ -279,41 +301,36 @@ func (w *FileWriter) gzipMerge() {
 }
 
 func (w *FileWriter) mergeToFirstRenameToLast(dir string, toMerge []os.FileInfo) error {
-	logErr := func(err error) {
-		if err != nil {
-			log.Error("error on merging gzips: %s", err)
-		}
-	}
 	dstFi := toMerge[0]
 	dstFilename := filepath.Join(dir, dstFi.Name())
-	dst, err := os.OpenFile(dstFilename, os.O_APPEND|os.O_WRONLY, 0644)
+	dst, err := os.OpenFile(dstFilename, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return fmt.Errorf("open file %s: %s", dstFilename, err)
 	}
-	defer logErr(dst.Close())
+	defer log.ErrorFunc(dst.Close, "close merge dst %s", dstFilename)
 
 	for _, srcFi := range toMerge[1:] {
-		if err := w.appendFile(dst, filepath.Join(dir, srcFi.Name())); err != nil {
+		err := func() error {
+			srcFilename := filepath.Join(dir, srcFi.Name())
+			src, err := os.Open(srcFilename)
+			if err != nil {
+				return fmt.Errorf("open file %s: %s", srcFilename, err)
+			}
+			defer log.ErrorFunc(src.Close, "close merge src %s", srcFilename)
+			if written, err := io.Copy(dst, src); err != nil {
+				return fmt.Errorf("append gzip: written %d, err %s", written, err)
+			}
+			if err := os.Remove(srcFilename); err != nil {
+				return fmt.Errorf("remove %s: %s", srcFilename, err)
+			}
+			return nil
+		}()
+		if err != nil {
 			return err
 		}
 	}
 	newDstFilename := filepath.Join(dir, toMerge[len(toMerge)-1].Name())
 	return os.Rename(dstFilename, newDstFilename)
-}
-
-func (w *FileWriter) appendFile(dst io.Writer, srcFilename string) error {
-	src, err := os.OpenFile(srcFilename, os.O_RDONLY, 0)
-	if err != nil {
-		return fmt.Errorf("open file %s: %s", srcFilename, err)
-	}
-	defer src.Close()
-	if written, err := io.Copy(dst, src); err != nil {
-		return fmt.Errorf("append gzip: written %d, err %s", written, err)
-	}
-	if err := os.Remove(srcFilename); err != nil {
-		return fmt.Errorf("remove %s: %s", srcFilename, err)
-	}
-	return nil
 }
 
 func (w *FileWriter) cleanExtraBackups() {
@@ -323,8 +340,11 @@ func (w *FileWriter) cleanExtraBackups() {
 		log.Error(err.Error())
 		return
 	}
-	for i := 0; i < len(fis)-w.maxBackups-1; i++ {
-		name := fis[i].Name()
+	if len(fis) <= w.maxBackups {
+		return
+	}
+	for _, fi := range fis[:len(fis)-w.maxBackups] {
+		name := fi.Name()
 		if err := os.Remove(filepath.Join(dir, name)); err != nil {
 			log.Error("remove backup file %s: %s", name, err)
 		}
@@ -368,5 +388,23 @@ func (w *FileWriter) rotatedFilename(now time.Time) string {
 	ext := filepath.Ext(w.filename)
 	prefix := w.filename[:len(w.filename)-len(ext)]
 	ts := now.Format("2006-01-02T15-04-05.000Z")
-	return prefix + "." + strings.ReplaceAll(ts, ".", "-")  + ext
+	return prefix + "." + strings.ReplaceAll(ts, ".", "-") + ext
+}
+
+func (w *FileWriter) parseTimeFromBackup(filename string) time.Time {
+	filename = filepath.Base(filename)
+	fields := strings.SplitN(filename, ".", 3)
+	ts := fields[1]
+	lastDashIdx := strings.LastIndex(ts, "-")
+	if len(ts)-lastDashIdx != 5 {
+		log.Error("invalid backup filename format: %s", filename)
+		return time.Unix(math.MaxInt64, 0)
+	}
+	tsInFmt := ts[:len(ts)-5] + "." + ts[len(ts)-4:]
+	t, err := time.Parse("2006-01-02T15-04-05.000Z", tsInFmt)
+	if err != nil {
+		log.Error("invalid backup filename format: %s", filename)
+		return time.Unix(math.MaxInt64, 0)
+	}
+	return t
 }

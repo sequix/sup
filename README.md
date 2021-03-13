@@ -103,11 +103,13 @@ ENV_VAR2 = "val2"
 path = "./tail.log"
 # Whether the rotated log files should be compressed with gzip, no compression by default.
 compress = false
-# Maximum number of days to retain old log files based on the UTC time encoded in their filename.
-maxAge = 30
+# Whether the gzipped backups would be merged or not, no merging by default.
+mergeCompressed = true
+# Maximum duration to retain old log files based on the UTC time encoded in their filename.
+maxAge = "30d"
 # Maximum number of old log files to retain. Retaining all old log files by default.
 maxBackups = 32
-# Maximum size in megabytes of the log file before it gets rotated. 128 MiB by default.
+# Maximum size in MiB of the log file before it gets rotated. 128 MiB by default.
 maxSize = 128
 ```
 
