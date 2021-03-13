@@ -8,10 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gopkg.in/natefinch/lumberjack.v2"
-
 	"github.com/sequix/sup/pkg/config"
 	"github.com/sequix/sup/pkg/log"
+	"github.com/sequix/sup/pkg/rotate"
 	"github.com/sequix/sup/pkg/util"
 )
 
@@ -48,13 +47,16 @@ func InitServer() {
 	cmd.Env = envs
 	cmd.Dir = processConfig.WorkDir
 
-	logger := &lumberjack.Logger{
-		Filename:   logConfig.Path,
-		MaxSize:    logConfig.MaxSize,
-		MaxAge:     logConfig.MaxAge,
-		MaxBackups: logConfig.MaxBackups,
-		Compress:   logConfig.Compress,
-		LocalTime:  false,
+	logger, err := rotate.NewFileWriter(
+		rotate.WithFilename(logConfig.Path),
+		rotate.WithMaxBytes(int64(logConfig.MaxSize)*1024*1024),
+		rotate.WithMaxBackups(logConfig.MaxBackups),
+		rotate.WithCompress(logConfig.Compress),
+		rotate.WithMergeCompressedBackups(logConfig.MergeCompressed),
+		rotate.WithMaxAge(logConfig.MaxAge),
+	)
+	if err != nil {
+		log.Fatal("init rotate logger: %s", err)
 	}
 
 	controller = &Controller{
@@ -95,10 +97,7 @@ func Serve(stop util.BroadcastCh) {
 
 	go func() {
 		<-stop
-		log.Info("stopping the program")
-		if err := controller.stopAction(); err != nil {
-			log.Error("stop the program: %s", err)
-		}
+		controller.close()
 		if err := unixListener.Close(); err != nil {
 			log.Error("close socket listener: %s", err)
 		}

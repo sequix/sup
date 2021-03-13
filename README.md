@@ -25,6 +25,7 @@ $ ./sup -c config.toml reload       # Send SIGHUP(1) to the process.
 $ ./sup -c config.toml kill         # Send SIGKILL(9) to the process.
 $ ./sup -c config.toml status       # Show the process status.
 $ ./sup -c config.toml exit         # Exit the Sup daemon and the process asynchronously.
+$ ./sup -c config.toml exit-wait    # Wait the Sup daemon and the process to exit.
 
 # General directory format
 .
@@ -102,11 +103,13 @@ ENV_VAR2 = "val2"
 path = "./tail.log"
 # Whether the rotated log files should be compressed with gzip, no compression by default.
 compress = false
-# Maximum number of days to retain old log files based on the UTC time encoded in their filename.
-maxAge = 30
+# Whether the gzipped backups would be merged or not, no merging by default.
+mergeCompressed = false
+# Maximum duration to retain old log files based on the UTC time encoded in their filename.
+maxAge = "30d"
 # Maximum number of old log files to retain. Retaining all old log files by default.
 maxBackups = 32
-# Maximum size in megabytes of the log file before it gets rotated. 128 MiB by default.
+# Maximum size in MiB of the log file before it gets rotated. 128 MiB by default.
 maxSize = 128
 ```
 
@@ -116,6 +119,6 @@ maxSize = 128
 
 No. I recommand to use a config file for the program to leave the config of sup immutable.
 
-For those using command line flags (like [VictoriaMeitrcs](https://github.com/VictoriaMetrics/VictoriaMetrics)), write a bash shell with `exec` command to execute the actual program,
+For those using command line flags (like [VictoriaMetrics](https://github.com/VictoriaMetrics/VictoriaMetrics)), write a bash shell with `exec` command to execute the actual program,
 
 so that `restart` could sense the changes of flags, just like the example above.
