@@ -35,10 +35,10 @@ $ ./sup -c config.toml exit-wait    # Wait the Sup daemon and the process to exi
 │   ├── flog.sh   # command to start nginx
 │   └── flog.toml # config of Sup 
 ├── log
-│   ├── flog-2021-03-02T08-54-09.711.log
-│   ├── flog-2021-03-02T09-24-12.586.log
-│   ├── flog-2021-03-02T09-59-26.709.log # rotated logs, filename encoded with UTC datetime
-│   └── flog.log                         # output of the combination of stdout and stderr of flog
+│   ├── flog-2021-03-02T08-54-09-711Z.log
+│   ├── flog-2021-03-02T09-24-12-586Z.log
+│   ├── flog-2021-03-02T09-59-26-709Z.log # rotated logs, filename encoded with UTC datetime
+│   └── flog.log                          # output of the combination of stdout and stderr of flog
 ├── sup           # Sup binary
 └── sup.d
     ├── flog.sock # socket the Sup CLI will connect to
