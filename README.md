@@ -36,8 +36,8 @@ $ ./sup -c config.toml exit-wait    # Wait the Sup daemon and the process to exi
 │   └── flog.toml # config of Sup 
 ├── log
 │   ├── flog-2021-03-02T08-54-09-711Z.log
-│   ├── flog-2021-03-02T09-24-12-586Z.log
-│   ├── flog-2021-03-02T09-59-26-709Z.log # rotated logs, filename encoded with UTC datetime
+│   ├── flog-2021-03-02T09-24-12-586Z.log # rotated logs, filename encoded with UTC datetime
+│   ├── flog-2021-03-02T09-59-26-709Z.log # the datetime is the instant when the last write taken place
 │   └── flog.log                          # output of the combination of stdout and stderr of flog
 ├── sup           # Sup binary
 └── sup.d
