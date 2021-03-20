@@ -177,7 +177,6 @@ func (c *Controller) waiter(stop util.BroadcastCh) {
 }
 
 func (c *Controller) handleStart() (err error) {
-	log.Info("starting program")
 	if err = c.startAction(); err == nil {
 		log.Info("started program")
 	} else {
