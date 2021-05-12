@@ -4,7 +4,7 @@
 # sup
 Supervisor for single process. Supports CLI, auto-restart, log-rotate-clean based both on time and size.
 
-A statically linked binary only and reduced size 2.0MiB with 'strip -s' and 'upx -9'.
+A statically linked binary only and reduced size 1.59MiB with 'strip -s' and 'upx -9'.
 
 You can download the binary [here](https://github.com/sequix/sup/releases).
 
