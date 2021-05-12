@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -18,6 +19,8 @@ import (
 
 // for unit test
 var timeNow = time.Now
+
+var _ io.WriteCloser = (*FileWriter)(nil)
 
 type FileWriter struct {
 	// filename is the file to write logs to.  Backup log files will be retained
@@ -49,7 +52,7 @@ type FileWriter struct {
 	backMu sync.Mutex
 	size   int64
 	file   *os.File
-	stop   *util.RunWrapper
+	stop   *util.Runner
 }
 
 type Option func(*FileWriter)
@@ -92,7 +95,6 @@ func WithMaxAge(maxAge time.Duration) Option {
 
 func NewFileWriter(opts ...Option) (*FileWriter, error) {
 	fw := &FileWriter{
-		filename: "rotate.log",
 		maxBytes: 128 * 1024 * 1024,
 	}
 	for _, opt := range opts {
@@ -109,8 +111,6 @@ func NewFileWriter(opts ...Option) (*FileWriter, error) {
 	}
 	return fw, nil
 }
-
-var _ io.WriteCloser = (*FileWriter)(nil)
 
 // Write implements io.Writer.  If a write would cause the log file to be larger
 // than maxBytes, the file is closed, rotate to include a timestamp of the
@@ -197,6 +197,8 @@ func (w *FileWriter) cleanAgedBackups(now time.Time) {
 			filename := filepath.Join(dir, fi.Name())
 			if err := os.Remove(filename); err != nil {
 				log.Error("remove %s: %s", filename, err)
+			} else {
+				log.Info("deleted aged log %s", fi.Name())
 			}
 		}
 	}
@@ -386,21 +388,22 @@ func (w *FileWriter) rotatedFilename(now time.Time) string {
 	now = now.UTC()
 	ext := filepath.Ext(w.filename)
 	prefix := w.filename[:len(w.filename)-len(ext)]
-	ts := now.Format("2006-01-02T15-04-05.000Z")
-	return prefix + "." + strings.ReplaceAll(ts, ".", "-") + ext
+	filename := prefix + "-" + now.Format("20060102150405")
+	if len(ext) > 0 {
+		filename = filename + ext
+	}
+	return filename
 }
 
+var reTimeFromBackup = regexp.MustCompile(`^.*-([0-9]{14})(\..*)?$`)
+
 func (w *FileWriter) parseTimeFromBackup(filename string) time.Time {
-	filename = filepath.Base(filename)
-	fields := strings.SplitN(filename, ".", 3)
-	ts := fields[1]
-	lastDashIdx := strings.LastIndex(ts, "-")
-	if len(ts)-lastDashIdx != 5 {
+	m := reTimeFromBackup.FindStringSubmatch(filepath.Base(filename))
+	if len(m) != 3 {
 		log.Error("invalid backup filename format: %s", filename)
 		return time.Unix(math.MaxInt64, 0)
 	}
-	tsInFmt := ts[:len(ts)-5] + "." + ts[len(ts)-4:]
-	t, err := time.Parse("2006-01-02T15-04-05.000Z", tsInFmt)
+	t, err := time.Parse("20060102150405", m[1])
 	if err != nil {
 		log.Error("invalid backup filename format: %s", filename)
 		return time.Unix(math.MaxInt64, 0)

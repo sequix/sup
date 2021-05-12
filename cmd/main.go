@@ -12,13 +12,9 @@ import (
 	"github.com/sequix/sup/pkg/util"
 )
 
-var (
-	stop util.BroadcastCh
-)
+var stop = util.SetupSignalHandler()
 
 func main() {
-	stop = util.SetupSignalHandler()
-	log.Init()
 	flag.Parse()
 	buildinfo.Init()
 	config.Init()

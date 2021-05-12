@@ -10,26 +10,22 @@ func NewBroadcastCh() BroadcastCh { return make(chan struct{}) }
 func (bc BroadcastCh) Broadcast() { close(bc) }
 func (bc BroadcastCh) Wait()      { <-bc }
 
-type RunWrapper struct {
+type Runner struct {
 	stop BroadcastCh
 	done *sync.WaitGroup
 }
 
-func (rw *RunWrapper) Stop() { rw.stop.Broadcast() }
-func (rw *RunWrapper) Wait() { rw.done.Wait() }
-
-func (rw *RunWrapper) StopAndWait() {
-	rw.Stop()
-	rw.Wait()
-}
+func (rw *Runner) Stop()        { rw.stop.Broadcast() }
+func (rw *Runner) Wait()        { rw.done.Wait() }
+func (rw *Runner) StopAndWait() { rw.Stop(); rw.Wait() }
 
 type RunFunc func(BroadcastCh)
 
-func Run(rfs ...RunFunc) *RunWrapper {
+func Run(rfs ...RunFunc) *Runner {
 	if len(rfs) == 0 {
 		return nil
 	}
-	rw := &RunWrapper{
+	rw := &Runner{
 		stop: NewBroadcastCh(),
 		done: &sync.WaitGroup{},
 	}

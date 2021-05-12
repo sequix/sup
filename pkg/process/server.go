@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/sequix/sup/pkg/config"
 	"github.com/sequix/sup/pkg/log"
@@ -53,7 +54,7 @@ func InitServer() {
 		rotate.WithMaxBackups(logConfig.MaxBackups),
 		rotate.WithCompress(logConfig.Compress),
 		rotate.WithMergeCompressedBackups(logConfig.MergeCompressed),
-		rotate.WithMaxAge(logConfig.MaxAge),
+		rotate.WithMaxAge(time.Hour * 24 * time.Duration(logConfig.MaxDays)),
 	)
 	if err != nil {
 		log.Fatal("init rotate logger: %s", err)

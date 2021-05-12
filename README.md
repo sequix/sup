@@ -35,10 +35,10 @@ $ ./sup -c config.toml exit-wait    # Wait the Sup daemon and the process to exi
 │   ├── flog.sh   # command to start nginx
 │   └── flog.toml # config of Sup 
 ├── log
-│   ├── flog-2021-03-02T08-54-09-711Z.log
-│   ├── flog-2021-03-02T09-24-12-586Z.log # rotated logs, filename encoded with UTC datetime
-│   ├── flog-2021-03-02T09-59-26-709Z.log # the datetime is the instant when the last write taken place
-│   └── flog.log                          # output of the combination of stdout and stderr of flog
+│   ├── flog-20210302085409.log
+│   ├── flog-20210302092412.log # rotated logs, filename encoded with UTC datetime
+│   ├── flog-20210302095926.log # the datetime is the instant when the last write taken place
+│   └── flog.log                # output of the combination of stdout and stderr of flog
 ├── sup           # Sup binary
 └── sup.d
     ├── flog.sock # socket the Sup CLI will connect to
@@ -63,7 +63,7 @@ restartStrategy = "on-failure"
 [program.log]
 path = "./log/flog.log"
 compress = false
-maxAge = 30
+maxDays = 30
 maxBackups = 2
 maxSize = 16
 ```
@@ -105,8 +105,8 @@ path = "./tail.log"
 compress = false
 # Whether the gzipped backups would be merged or not, no merging by default.
 mergeCompressed = false
-# Maximum duration to retain old log files based on the UTC time encoded in their filename.
-maxAge = "30d"
+# Maximum days to retain old log files based on the UTC time encoded in their filename.
+maxDays = 30
 # Maximum number of old log files to retain. Retaining all old log files by default.
 maxBackups = 32
 # Maximum size in MiB of the log file before it gets rotated. 128 MiB by default.

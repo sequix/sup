@@ -6,11 +6,7 @@ import (
 	"os"
 )
 
-var g *log.Logger
-
-func Init() {
-	g = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Lshortfile|log.LUTC)
-}
+var g = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.LUTC)
 
 func Info(format string, args ...interface{}) {
 	g.Output(2, fmt.Sprintf("INFO "+format, args...))
