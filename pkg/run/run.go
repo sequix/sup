@@ -1,32 +1,26 @@
-package util
+package run
 
 import (
 	"sync"
 )
 
-type BroadcastCh chan struct{}
-
-func NewBroadcastCh() BroadcastCh { return make(chan struct{}) }
-func (bc BroadcastCh) Broadcast() { close(bc) }
-func (bc BroadcastCh) Wait()      { <-bc }
-
 type Runner struct {
-	stop BroadcastCh
+	stop chan struct{}
 	done *sync.WaitGroup
 }
 
-func (rw *Runner) Stop()        { rw.stop.Broadcast() }
+func (rw *Runner) Stop()        { close(rw.stop) }
 func (rw *Runner) Wait()        { rw.done.Wait() }
 func (rw *Runner) StopAndWait() { rw.Stop(); rw.Wait() }
 
-type RunFunc func(BroadcastCh)
+type RunFunc func(<-chan struct{})
 
 func Run(rfs ...RunFunc) *Runner {
 	if len(rfs) == 0 {
 		return nil
 	}
 	rw := &Runner{
-		stop: NewBroadcastCh(),
+		stop: make(chan struct{}),
 		done: &sync.WaitGroup{},
 	}
 	rw.done.Add(len(rfs))

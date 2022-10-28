@@ -36,24 +36,12 @@ func Start() error {
 	return client.Call("Controller.Start", &Request{}, &Response{})
 }
 
-func StartWait() error {
-	return client.Call("Controller.StartWait", &Request{}, &Response{})
-}
-
 func Stop() error {
 	return client.Call("Controller.Stop", &Request{}, &Response{})
 }
 
-func StopWait() error {
-	return client.Call("Controller.StopWait", &Request{}, &Response{})
-}
-
 func Restart() error {
 	return client.Call("Controller.Restart", &Request{}, &Response{})
-}
-
-func RestartWait() error {
-	return client.Call("Controller.RestartWait", &Request{}, &Response{})
 }
 
 func Reload() error {
@@ -85,22 +73,14 @@ func Exit() error {
 	if err := sup.Signal(syscall.SIGTERM); err != nil {
 		return fmt.Errorf("sending SIGTERM to sup process %d: %s", rsp.SupPid, err)
 	}
+	for isPidRunning(rsp.SupPid) {
+		time.Sleep(100 * time.Millisecond)
+	}
 	return nil
 }
 
-func ExitWait() error {
-	if err := Exit(); err != nil {
-		return err
-	}
-	socketPath := config.G.SupConfig.Socket
-	for {
-		_, err := os.Stat(socketPath)
-		if os.IsNotExist(err) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("stat socket %s: %s", socketPath, err)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+func isPidRunning(pid int) bool {
+	statPath := fmt.Sprintf("/proc/%d/stat", pid)
+	_, err := os.Stat(statPath)
+	return err == nil
 }

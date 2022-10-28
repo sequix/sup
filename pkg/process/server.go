@@ -1,6 +1,8 @@
 package process
 
 import (
+	"fmt"
+	"io/ioutil"
 	"net"
 	"net/rpc"
 	"os"
@@ -12,7 +14,7 @@ import (
 	"github.com/sequix/sup/pkg/config"
 	"github.com/sequix/sup/pkg/log"
 	"github.com/sequix/sup/pkg/rotate"
-	"github.com/sequix/sup/pkg/util"
+	"github.com/sequix/sup/pkg/run"
 )
 
 var (
@@ -54,16 +56,19 @@ func InitServer() {
 		rotate.WithMaxBackups(logConfig.MaxBackups),
 		rotate.WithCompress(logConfig.Compress),
 		rotate.WithMergeCompressedBackups(logConfig.MergeCompressed),
-		rotate.WithMaxAge(time.Hour * 24 * time.Duration(logConfig.MaxDays)),
+		rotate.WithMaxAge(time.Hour*24*time.Duration(logConfig.MaxDays)),
 	)
 	if err != nil {
 		log.Fatal("init rotate logger: %s", err)
 	}
 
 	controller = &Controller{
-		cmd:      cmd,
-		logger:   logger,
-		waiterCh: make(chan struct{}),
+		cmd:       cmd,
+		logger:    logger,
+		startedCh: make(chan struct{}),
+		exitedCh:  make(chan struct{}),
+		wantStop:  0,
+		wantExit:  0,
 	}
 
 	server = rpc.NewServer()
@@ -75,6 +80,9 @@ func InitServer() {
 	socketPathDir := filepath.Dir(socketPath)
 	if err := os.MkdirAll(socketPathDir, 0755); err != nil {
 		log.Fatal("mkdir %s: %s", socketPathDir, err)
+	}
+	if err := removeNotUsingSocket(socketPath); err != nil {
+		log.Fatal(err.Error())
 	}
 
 	ua, err := net.ResolveUnixAddr("unix", socketPath)
@@ -88,17 +96,53 @@ func InitServer() {
 	}
 
 	if processConfig.AutoStart {
-		go controller.handleStart()
+		go func() { _ = controller.startHandler() }()
 	}
 }
 
-func Serve(stop util.BroadcastCh) {
-	waiterRw := util.Run(controller.waiter)
-	defer waiterRw.StopAndWait()
+func removeNotUsingSocket(path string) error {
+	stat, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to stat socket %s: %s", path, err)
+	}
+	if (stat.Mode() & os.ModeSocket) == 0 {
+		return fmt.Errorf("not a socket file %s", path)
+	}
+	sockBytes, err := ioutil.ReadFile("/proc/net/unix")
+	if err != nil {
+		return fmt.Errorf("failed to read /proc/net/unix: %s", err)
+	}
+	var sockInode string
+	for _, line := range strings.Split(string(sockBytes), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.Contains(line, path) {
+			fields := strings.Fields(line)
+			if len(fields) != 8 {
+				return fmt.Errorf("invalid line in /proc/net/unix: %q", line)
+			}
+			sockInode = fields[6]
+			break
+		}
+	}
+	if len(sockInode) == 0 {
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("failed to remove socket %s: %s", path, err)
+		}
+		log.Info("deleted socket file not used by any process: %s", path)
+		return nil
+	}
+	return fmt.Errorf("socket is being used by other process: %s", path)
+}
+
+func Serve(stop <-chan struct{}) {
+	controllerRw := run.Run(controller.run)
 
 	go func() {
 		<-stop
-		controller.close()
+		controllerRw.StopAndWait()
 		if err := unixListener.Close(); err != nil {
 			log.Error("close socket listener: %s", err)
 		}

@@ -3,7 +3,7 @@ package config
 import (
 	"flag"
 	"os"
-	"os/exec"
+	"path/filepath"
 
 	"github.com/pelletier/go-toml"
 
@@ -44,9 +44,25 @@ func Init() {
 		G.ProgramConfig.Process.WorkDir = wd
 	}
 
-	path, err := exec.LookPath(G.ProgramConfig.Process.Path)
-	if err != nil {
-		log.Fatal("lookup binary path: %s", err)
+	if !filepath.IsAbs(G.ProgramConfig.Process.WorkDir) {
+		log.Fatal("expected an absolute path for process workdir")
 	}
-	G.ProgramConfig.Process.Path = path
+
+	if len(G.SupConfig.Socket) == 0 {
+		log.Fatal("expected non-empty socket path")
+	}
+	if !filepath.IsAbs(G.SupConfig.Socket) {
+		G.SupConfig.Socket = filepath.Clean(filepath.Join(G.ProgramConfig.Process.WorkDir, G.SupConfig.Socket))
+	}
+
+	if !filepath.IsAbs(G.ProgramConfig.Process.Path) {
+		G.ProgramConfig.Process.Path = filepath.Clean(filepath.Join(G.ProgramConfig.Process.WorkDir, G.ProgramConfig.Process.Path))
+	}
+	stat, err := os.Stat(G.ProgramConfig.Process.Path)
+	if err != nil {
+		log.Fatal("failed to stat program file %s: %s", G.ProgramConfig.Process.Path, err)
+	}
+	if (stat.Mode() & 0111) == 0 {
+		log.Fatal("program file is not executable: %s", G.ProgramConfig.Process.Path)
+	}
 }

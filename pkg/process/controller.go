@@ -8,6 +8,10 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -16,238 +20,222 @@ import (
 	"github.com/sequix/sup/pkg/config"
 	"github.com/sequix/sup/pkg/log"
 	"github.com/sequix/sup/pkg/rotate"
-	"github.com/sequix/sup/pkg/util"
 )
 
 type Controller struct {
+	mu           sync.Mutex
 	cmd          *exec.Cmd
 	logWritePipe *io.PipeWriter
 	logReadPipe  *io.PipeReader
 	logger       *rotate.FileWriter
-	actionMu     sync.Mutex
-	waiterCh     chan struct{}
+	startedCh    chan struct{}
+	exitedCh     chan struct{}
 	wantStop     int32
 	wantExit     int32
 }
 
-func (c *Controller) close() {
-	log.Info("stopping the program")
-	if err := controller.stopAction(); err != nil {
-		log.Error("stop the program: %s", err)
-	}
-	if err := c.logger.Close(); err != nil {
-		log.Error("stop the rotate logger: %s", err)
-	}
-}
-
-func (c *Controller) Start(_ *Request, _ *Response) error {
-	log.Info("recv start action")
-	go func() {
-		if err := c.handleStart(); err != nil {
-			log.Error(err.Error())
-		}
-	}()
-	return nil
-}
-
-func (c *Controller) StartWait(_ *Request, _ *Response) error {
-	log.Info("recv start-wait action")
-	if err := c.handleStart(); err != nil {
-		log.Error(err.Error())
-	}
-	return nil
-}
-
-func (c *Controller) Stop(_ *Request, _ *Response) error {
-	log.Info("recv stop action")
-	go func() {
-		if err := c.handleStop(); err != nil {
-			log.Error(err.Error())
-		}
-	}()
-	return nil
-}
-
-func (c *Controller) StopWait(_ *Request, _ *Response) error {
-	log.Info("recv stop-wait action")
-	if err := c.handleStop(); err != nil {
-		log.Error(err.Error())
-	}
-	return nil
-}
-
-func (c *Controller) Restart(_ *Request, _ *Response) error {
-	log.Info("recv restart action")
-	go func() {
-		if err := c.handleRestart(); err != nil {
-			log.Error(err.Error())
-		}
-	}()
-	return nil
-}
-
-func (c *Controller) RestartWait(_ *Request, _ *Response) error {
-	log.Info("recv restart-wait action")
-	if err := c.handleRestart(); err != nil {
-		log.Error(err.Error())
-	}
-	return nil
-}
-
-func (c *Controller) Reload(_ *Request, _ *Response) error {
-	log.Info("recv reload action")
-	if err := c.handleReload(); err != nil {
-		log.Error(err.Error())
-	}
-	return nil
-}
-
-func (c *Controller) Kill(_ *Request, _ *Response) error {
-	log.Info("recv kill action")
-	if err := c.handleKill(); err != nil {
-		log.Error(err.Error())
-	}
-	return nil
-}
-
-func (c *Controller) Status(_ *Request, rsp *Response) error {
-	log.Info("recv status action")
-	err := c.handleStatus(rsp)
-	if err != nil {
-		log.Error(err.Error())
-	}
-	return err
-}
-
-func (c *Controller) SupPid(_ *Request, rsp *Response) error {
-	rsp.SupPid = os.Getpid()
-	return nil
-}
-
-func (c *Controller) waiter(stop util.BroadcastCh) {
-	go func() {
-		<-stop
-		c.setWantExit()
-		close(c.waiterCh)
-	}()
-
+func (c *Controller) run(stop <-chan struct{}) {
 	for {
-		<-c.waiterCh
-		if c.getWantExit() {
-			return
-		}
-		if c.getWantStop() {
-			continue
-		}
-
-		stat, err := c.cmd.Process.Wait()
-		if err != nil {
-			log.Error("wait error %s", err)
-			continue
-		}
-		log.Info("program exited: %s", stat)
-
-		if err := c.logReadPipe.Close(); err != nil {
-			log.Error("close log pipe reader: %s", err)
-		}
-		if err := c.logWritePipe.Close(); err != nil {
-			log.Error("close log pipe writer: %s", err)
-		}
-
-		// Wait for wantExit and wantStop set.
-		time.Sleep(300 * time.Millisecond)
-		if c.getWantExit() {
-			return
-		}
-		if c.getWantStop() {
-			continue
-		}
-
-		// program stopped itself, restart as config specified
-		switch processConfig.RestartStrategy {
-		case config.RestartStrategyNone:
-		case config.RestartStrategyAlways:
-			c.handleStart()
-		case config.RestartStrategyOnFailure:
-			if !stat.Success() {
-				c.handleStart()
+		select {
+		case <-stop:
+			c.setWantExit()
+			_ = c.Stop(nil, nil)
+		case <-c.startedCh:
+			go c.wait()
+		case <-c.exitedCh:
+			if c.getWantExit() {
+				return
+			}
+			if c.getWantStop() {
+				continue
+			}
+			switch processConfig.RestartStrategy {
+			case config.RestartStrategyNone:
+			case config.RestartStrategyAlways:
+				c.mustStart()
+			case config.RestartStrategyOnFailure:
+				if !c.cmd.ProcessState.Success() {
+					c.mustStart()
+				}
 			}
 		}
 	}
 }
 
-func (c *Controller) handleStart() (err error) {
+func (c *Controller) mustStart() {
+	for {
+		if err := c.startHandler(); err == nil {
+			return
+		}
+	}
+}
+
+func (c *Controller) Start(_ *Request, _ *Response) (err error) {
+	c.setWantStop(0)
+	return c.startHandler()
+}
+
+func (c *Controller) startHandler() (err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	log.Info("starting program")
 	if err = c.startAction(); err == nil {
-		log.Info("started program")
+		log.Info("started program %d", c.cmd.Process.Pid)
 	} else {
 		log.Error("start program: %s", err)
 	}
 	return
 }
 
-func (c *Controller) handleStop() (err error) {
+func (c *Controller) startAction() error {
+	if c.running() {
+		return nil
+	}
+	c.cmd.Process = nil
+	c.logReadPipe, c.logWritePipe = io.Pipe()
+	c.cmd.Stdout = c.logWritePipe
+	c.cmd.Stderr = c.logWritePipe
+	go func() {
+		written, err := io.Copy(c.logger, c.logReadPipe)
+		if err != nil && !errors.Is(err, io.ErrClosedPipe) {
+			log.Error("stopped logger harvest, written %d bytes, err %s", written, err)
+		}
+	}()
+	if err := c.cmd.Start(); err != nil {
+		return fmt.Errorf("start program: %s", err)
+	}
+	time.Sleep(time.Duration(config.G.ProgramConfig.Process.StartSeconds) * time.Second)
+	if !c.running() {
+		_ = c.logReadPipe.Close()
+		_ = c.logWritePipe.Close()
+		return fmt.Errorf("program not running after %s seconds", config.G.ProgramConfig.Process.StartSeconds)
+	}
+	go func() { c.startedCh <- struct{}{} }()
+	return nil
+}
+
+func (c *Controller) wait() {
+	var (
+		err  error
+		stat *os.ProcessState
+	)
+	for {
+		stat, err = c.cmd.Process.Wait()
+		if err != nil {
+			log.Error("wait program %d: %s", c.cmd.Process.Pid, err)
+			if c.running() {
+				continue
+			} else {
+				break
+			}
+		}
+	}
+	log.Info("program %d exited with stat: %s", c.cmd.Process.Pid, stat)
+	if err := c.logReadPipe.Close(); err != nil {
+		log.Error("close log pipe reader: %s", err)
+	}
+	if err := c.logWritePipe.Close(); err != nil {
+		log.Error("close log pipe writer: %s", err)
+	}
+	go func() { c.exitedCh <- struct{}{} }()
+}
+
+func (c *Controller) Stop(_ *Request, _ *Response) error {
+	c.setWantStop(1)
+	return c.stopHandler()
+}
+
+func (c *Controller) stopHandler() (err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	log.Info("stopping program %d", c.cmd.Process.Pid)
 	if err = c.stopAction(); err == nil {
-		log.Info("stopped program")
+		log.Info("stopped program %d", c.cmd.Process.Pid)
 	} else {
-		log.Error("stop program: %s", err)
+		log.Error("stop program %d: %s", c.cmd.Process.Pid, err)
 	}
 	return
 }
 
-func (c *Controller) handleRestart() (err error) {
-	defer func() {
-		if err == nil {
-			log.Info("restarted program")
-		} else {
-			log.Error("restart program: %s", err)
-		}
-	}()
-
-	if err = c.stopAction(); err != nil {
-		return err
+func (c *Controller) stopAction() error {
+	if !c.running() {
+		return nil
+	}
+	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		return fmt.Errorf("send SIGTERM: %s", err)
 	}
 	c.waitNotRunning()
-	if err = c.startAction(); err != nil {
-		return err
-	}
-	return
+	return nil
 }
 
-func (c *Controller) handleReload() (err error) {
+func (c *Controller) Restart(_ *Request, _ *Response) (err error) {
+	c.mu.Lock()
 	defer func() {
+		c.mu.Unlock()
 		if err == nil {
-			log.Info("reloaded program")
+			log.Info("restarted program %d", c.cmd.Process.Pid)
 		} else {
-			log.Error("reload program: %s", err)
+			log.Error("restart program %d: %s", c.cmd.Process.Pid, err)
 		}
 	}()
-
-	if err := c.cmd.Process.Signal(syscall.SIGHUP); err != nil {
-		return fmt.Errorf("reload send SIGHUP: %s", err)
-	}
-	return
-}
-
-func (c *Controller) handleKill() (err error) {
-	defer func() {
-		if err == nil {
-			log.Info("killed program")
-		} else {
-			log.Error("kill program: %s", err)
-		}
-	}()
-
-	if !c.running() {
+	c.setWantStop(0)
+	log.Info("restarting program %d", c.cmd.Process.Pid)
+	if err = c.stopAction(); err != nil {
 		return
 	}
-	c.setWantStop()
-	if err := c.cmd.Process.Kill(); err != nil {
-		return fmt.Errorf("kill: %s", err)
+	if err = c.startAction(); err != nil {
+		return
 	}
 	return
 }
 
-func (c *Controller) handleStatus(rsp *Response) error {
+func (c *Controller) Reload(_ *Request, _ *Response) (err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	log.Info("reloading program %d", c.cmd.Process.Pid)
+	if err = c.cmd.Process.Signal(syscall.SIGHUP); err != nil {
+		log.Error("reload program %d: %s", c.cmd.Process.Pid, err)
+	} else {
+		log.Info("reloaded program %d", c.cmd.Process.Pid)
+	}
+	return
+}
+
+func (c *Controller) Kill(_ *Request, _ *Response) (err error) {
+	c.mu.Lock()
+	defer func() {
+		c.mu.Unlock()
+		if err == nil {
+			log.Info("killed program %d", c.cmd.Process.Pid)
+		} else {
+			log.Error("kill program %d: %s", c.cmd.Process.Pid, err)
+		}
+	}()
+	c.setWantStop(1)
+	log.Info("killing program %d", c.cmd.Process.Pid)
+	if c.running() {
+		children, lerr := c.listChildrenProcesses(c.cmd.Process.Pid)
+		if lerr != nil {
+			log.Error("failed to list children processes of program %d: %s", c.cmd.Process.Pid, lerr)
+		}
+		err = c.cmd.Process.Kill()
+		if err != nil {
+			return
+		}
+		for _, pid := range children {
+			if err = syscall.Kill(pid, syscall.SIGKILL); err != nil {
+				err = fmt.Errorf("failed to kill child process %d: %s", pid, err)
+				return
+			}
+			log.Info("killed child process %d", pid)
+		}
+	}
+	return
+}
+
+func (c *Controller) Status(_ *Request, rsp *Response) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if !c.running() {
 		rsp.Message = "NotStarted\n"
 		return nil
@@ -276,46 +264,29 @@ func (c *Controller) handleStatus(rsp *Response) error {
 	return nil
 }
 
-func (c *Controller) startAction() error {
-	c.actionMu.Lock()
-	defer c.actionMu.Unlock()
-	if c.running() {
-		return nil
+func (c *Controller) SupPid(_ *Request, rsp *Response) error {
+	rsp.SupPid = os.Getpid()
+	return nil
+}
+
+func (c *Controller) running() bool {
+	if c.cmd.Process == nil {
+		return false
 	}
-	log.Info("starting program")
-	c.cmd.Process = nil
-	c.logReadPipe, c.logWritePipe = io.Pipe()
-	c.cmd.Stdout = c.logWritePipe
-	c.cmd.Stderr = c.logWritePipe
-	go func() {
-		written, err := io.Copy(c.logger, c.logReadPipe)
-		if err != nil && !errors.Is(err, io.ErrClosedPipe) {
-			log.Error("stopped logger harvest, written %d bytes, err %s", written, err)
+	return isPidRunning(c.cmd.Process.Pid)
+}
+
+func (c *Controller) waitNotRunning() {
+	for {
+		if !c.running() {
+			break
 		}
-	}()
-	if err := c.cmd.Start(); err != nil {
-		return fmt.Errorf("start command: %s", err)
+		time.Sleep(100 * time.Millisecond)
 	}
-	time.Sleep(time.Duration(config.G.ProgramConfig.Process.StartSeconds) * time.Second)
-	c.startWait()
-	return nil
 }
 
-func (c *Controller) stopAction() error {
-	c.actionMu.Lock()
-	defer c.actionMu.Unlock()
-	if !c.running() {
-		return nil
-	}
-	c.setWantStop()
-	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		return fmt.Errorf("send SIGTERM: %s", err)
-	}
-	return nil
-}
-
-func (c *Controller) setWantStop() {
-	atomic.StoreInt32(&c.wantStop, 1)
+func (c *Controller) setWantStop(ws int32) {
+	atomic.StoreInt32(&c.wantStop, ws)
 }
 
 func (c *Controller) getWantStop() bool {
@@ -330,24 +301,37 @@ func (c *Controller) getWantExit() bool {
 	return atomic.CompareAndSwapInt32(&c.wantExit, 1, 0)
 }
 
-func (c *Controller) startWait() {
-	go func() { c.waiterCh <- struct{}{} }()
-}
+var reAllDigits = regexp.MustCompile(`^[0-9]+$`)
 
-func (c *Controller) running() bool {
-	if c.cmd.Process == nil {
-		return false
+func (c *Controller) listChildrenProcesses(ppid int) ([]int, error) {
+	var children []int
+	fis, err := ioutil.ReadDir("/proc")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read dir /proc: %s", err)
 	}
-	statPath := fmt.Sprintf("/proc/%d/stat", c.cmd.Process.Pid)
-	_, err := os.Open(statPath)
-	return err == nil
-}
-
-func (c *Controller) waitNotRunning() {
-	for {
-		if !c.running() {
-			break
+	for _, fi := range fis {
+		if fi.IsDir() && reAllDigits.MatchString(filepath.Base(fi.Name())) {
+			pidS := filepath.Base(fi.Name())
+			statusBytes, err := ioutil.ReadFile(filepath.Join("/proc", pidS, "status"))
+			if err != nil {
+				continue
+			}
+			for _, line := range strings.Split(string(statusBytes), "\n") {
+				line = strings.ToLower(strings.TrimSpace(line))
+				if strings.HasPrefix(line, "ppid:") {
+					fields := strings.Fields(line)
+					gotPpid, err := strconv.Atoi(fields[len(fields)-1])
+					if err != nil {
+						continue
+					}
+					if gotPpid == ppid {
+						pid, _ := strconv.Atoi(pidS)
+						children = append(children, pid)
+					}
+					break
+				}
+			}
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
+	return children, nil
 }

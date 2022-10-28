@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/sequix/sup/pkg/log"
-	"github.com/sequix/sup/pkg/util"
+	"github.com/sequix/sup/pkg/run"
 )
 
 // for unit test
@@ -52,7 +52,7 @@ type FileWriter struct {
 	backMu sync.Mutex
 	size   int64
 	file   *os.File
-	stop   *util.Runner
+	stop   *run.Runner
 }
 
 type Option func(*FileWriter)
@@ -107,7 +107,7 @@ func NewFileWriter(opts ...Option) (*FileWriter, error) {
 		return nil, fmt.Errorf("expected maxBytes >= 0, got %d", fw.maxBytes)
 	}
 	if fw.maxAge > 0 {
-		fw.stop = util.Run(fw.ager)
+		fw.stop = run.Run(fw.ager)
 	}
 	return fw, nil
 }
@@ -169,7 +169,7 @@ func (w *FileWriter) Close() (err error) {
 	return
 }
 
-func (w *FileWriter) ager(stop util.BroadcastCh) {
+func (w *FileWriter) ager(stop <-chan struct{}) {
 	ticker := time.NewTicker(time.Minute)
 	for {
 		select {

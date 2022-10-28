@@ -6,7 +6,7 @@ type Config struct {
 }
 
 type Sup struct {
-	Socket string `toml:"socket" comment:"Path to an unix socket, to which Sup daemon will be listening." default:"./sup.sock"`
+	Socket string `toml:"socket" comment:"Path to an unix socket, to which Sup daemon will be listening. Relative path would based on process.workDir." default:"./sup.sock"`
 }
 
 type Program struct {
@@ -18,7 +18,7 @@ type Process struct {
 	Path            string                 `toml:"path" comment:"Path to an executable, which would spawn the supervised process."`
 	Args            []string               `toml:"args" comment:"Arguments to the supervised process."`
 	Envs            map[string]string      `toml:"envs" comment:"Environment variables to the supervised process."`
-	WorkDir         string                 `toml:"workDir" comment:"Working directory of the supervised process. Current directory by default." default:"./"`
+	WorkDir         string                 `toml:"workDir" comment:"Working directory of the supervised process given by absolute path. Current directory by default." default:""`
 	AutoStart       bool                   `toml:"autoStart" comment:"Start the process as Sup goes up. False by default." default:"false"`
 	StartSeconds    int                    `toml:"startSeconds" comment:"Sup waits 'startSeconds' after each start to avoid the process restarts too rapidly." default:"5"`
 	RestartStrategy ProcessRestartStrategy `toml:"restartStrategy" comment:"How to react when the supervised process went down. One of 'on-failure', 'always', 'none'. 'on-failure' by default." default:"on-failure"`

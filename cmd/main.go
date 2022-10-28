@@ -9,10 +9,8 @@ import (
 	"github.com/sequix/sup/pkg/config"
 	"github.com/sequix/sup/pkg/log"
 	"github.com/sequix/sup/pkg/process"
-	"github.com/sequix/sup/pkg/util"
+	"github.com/sequix/sup/pkg/run"
 )
-
-var stop = util.SetupSignalHandler()
 
 func main() {
 	flag.Parse()
@@ -27,11 +25,12 @@ func main() {
 }
 
 func server() {
+	stop := run.SetupSignalHandler()
 	process.InitServer()
-	serverRw := util.Run(process.Serve)
+	serverRw := run.Run(process.Serve)
 	log.Info("Sup daemon inited")
 
-	stop.Wait()
+	<-stop
 	log.Info("recv term signal")
 
 	serverRw.StopAndWait()
@@ -46,16 +45,10 @@ func client() {
 	switch action := flag.Arg(0); action {
 	case process.ActionStart:
 		err = process.Start()
-	case process.ActionStartWait:
-		err = process.StartWait()
 	case process.ActionStop:
 		err = process.Stop()
-	case process.ActionStopWait:
-		err = process.StopWait()
 	case process.ActionRestart:
 		err = process.Restart()
-	case process.ActionRestartWait:
-		err = process.RestartWait()
 	case process.ActionReload:
 		err = process.Reload()
 	case process.ActionKill:
@@ -64,10 +57,8 @@ func client() {
 		err = process.Status()
 	case process.ActionExit:
 		err = process.Exit()
-	case process.ActionExitWait:
-		err = process.ExitWait()
 	default:
-		fmt.Printf("unknown action %q, want one of [start, start-wait, stop, stop-wait, restart, restart-wait, kill, reload, status, exit, exit-wait]\n", action)
+		fmt.Printf("unknown action %q, want one of [start, stop, restart, kill, reload, status, exit]\n", action)
 		os.Exit(1)
 	}
 

@@ -15,17 +15,13 @@ You can download the binary [here](https://github.com/sequix/sup/releases).
 $ ./sup -c config.toml
 
 # Using CLI
-$ ./sup -c config.toml start        # Start the process asynchronously.
-$ ./sup -c config.toml start-wait   # Wait the process to start.
-$ ./sup -c config.toml stop         # Stop the process asynchronously by sending SIGTERM(15).
-$ ./sup -c config.toml stop-wait    # Wait the process to stop.
-$ ./sup -c config.toml restart      # Restart the process asynchronously.
-$ ./sup -c config.toml restart-wait # Wait the process to restart.
+$ ./sup -c config.toml start        # Start the process.
+$ ./sup -c config.toml stop         # Stop the process by sending SIGTERM(15).
+$ ./sup -c config.toml restart      # Equilevant to Stop & Start.
 $ ./sup -c config.toml reload       # Send SIGHUP(1) to the process.
-$ ./sup -c config.toml kill         # Send SIGKILL(9) to the process.
+$ ./sup -c config.toml kill         # Send SIGKILL(9) to the process and all its child processes.
 $ ./sup -c config.toml status       # Show the process status.
-$ ./sup -c config.toml exit         # Exit the Sup daemon and the process asynchronously.
-$ ./sup -c config.toml exit-wait    # Wait the Sup daemon and the process to exit.
+$ ./sup -c config.toml exit         # Exit the Sup daemon and the process.
 
 # General directory format
 .
