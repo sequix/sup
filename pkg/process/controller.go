@@ -40,6 +40,7 @@ func (c *Controller) run(stop <-chan struct{}) {
 		case <-stop:
 			c.setWantExit()
 			_ = c.Stop(nil, nil)
+			return
 		case <-c.startedCh:
 			go c.wait()
 		case <-c.exitedCh:
@@ -230,6 +231,7 @@ func (c *Controller) Kill(_ *Request, _ *Response) (err error) {
 			log.Info("killed child process %d", pid)
 		}
 	}
+	c.waitNotRunning()
 	return
 }
 
@@ -273,7 +275,13 @@ func (c *Controller) running() bool {
 	if c.cmd.Process == nil {
 		return false
 	}
-	return isPidRunning(c.cmd.Process.Pid)
+	pids, _ := c.listChildrenProcesses(c.cmd.Process.Pid)
+	for _, pid := range append(pids, c.cmd.Process.Pid) {
+		if isPidRunning(pid) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Controller) waitNotRunning() {
