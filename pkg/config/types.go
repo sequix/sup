@@ -22,9 +22,11 @@ type Process struct {
 	AutoStart       bool                   `toml:"autoStart" comment:"Start the process as Sup goes up. False by default." default:"false"`
 	StartSeconds    int                    `toml:"startSeconds" comment:"Sup waits 'startSeconds' after each start to avoid the process restarts too rapidly." default:"5"`
 	RestartStrategy ProcessRestartStrategy `toml:"restartStrategy" comment:"How to react when the supervised process went down. One of 'on-failure', 'always', 'none'. 'on-failure' by default." default:"on-failure"`
+	User            string                 `toml:"user" comment:"User of the supervised process. Inherited from sup by default." default:""`
+	Group           string                 `toml:"group" comment:"Group of the supervised process. Inherited from sup by default." default:""`
 }
 
-// How to react when the supervised process went down.
+// ProcessRestartStrategy how to react when the supervised process went down.
 type ProcessRestartStrategy string
 
 const (

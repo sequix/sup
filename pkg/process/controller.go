@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -109,7 +108,7 @@ func (c *Controller) startAction() error {
 	if !c.running() {
 		_ = c.logReadPipe.Close()
 		_ = c.logWritePipe.Close()
-		return fmt.Errorf("program not running after %s seconds", config.G.ProgramConfig.Process.StartSeconds)
+		return fmt.Errorf("program not running after %d seconds", config.G.ProgramConfig.Process.StartSeconds)
 	}
 	go func() { c.startedCh <- struct{}{} }()
 	return nil
@@ -123,7 +122,7 @@ func (c *Controller) wait() {
 	for {
 		stat, err = c.cmd.Process.Wait()
 		if err != nil {
-			log.Error("wait program %d: %s", c.cmd.Process.Pid, err)
+			log.Warn("wait program %d: %s", c.cmd.Process.Pid, err)
 			if c.running() {
 				continue
 			} else {
@@ -162,9 +161,20 @@ func (c *Controller) stopAction() error {
 	if !c.running() {
 		return nil
 	}
+	children, err := c.listChildrenProcesses(c.cmd.Process.Pid)
+	if err != nil {
+		log.Error("failed to list children processes of program %d: %s", c.cmd.Process.Pid, err)
+	}
+	for _, pid := range children {
+		if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
+			return fmt.Errorf("failed to send SIGTERM to grandchild process %d: %s", pid, err)
+		}
+		log.Info("sent SIGTERM to child process %d", pid)
+	}
 	if err := c.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		return fmt.Errorf("send SIGTERM: %s", err)
 	}
+	log.Info("sent SIGTERM to child process %d", c.cmd.Process.Pid)
 	c.waitNotRunning()
 	return nil
 }
@@ -221,11 +231,12 @@ func (c *Controller) Kill(_ *Request, _ *Response) (err error) {
 		}
 		err = c.cmd.Process.Kill()
 		if err != nil {
+			err = fmt.Errorf("failed to kill child process %d: %s", &c.cmd.Process.Pid, err)
 			return
 		}
 		for _, pid := range children {
 			if err = syscall.Kill(pid, syscall.SIGKILL); err != nil {
-				err = fmt.Errorf("failed to kill child process %d: %s", pid, err)
+				err = fmt.Errorf("failed to kill grand-child process %d: %s", pid, err)
 				return
 			}
 			log.Info("killed child process %d", pid)
@@ -245,7 +256,7 @@ func (c *Controller) Status(_ *Request, rsp *Response) error {
 	// procfs doc: https://man7.org/linux/man-pages/man5/procfs.5.html
 	pid := c.cmd.Process.Pid
 	statPath := fmt.Sprintf("/proc/%d/stat", pid)
-	statBytes, err := ioutil.ReadFile(statPath)
+	statBytes, err := os.ReadFile(statPath)
 	if err != nil {
 		rsp.Message = fmt.Sprintf("failed to read %s: %s", statPath, err)
 		return nil
@@ -256,7 +267,7 @@ func (c *Controller) Status(_ *Request, rsp *Response) error {
 		return nil
 	}
 	cmdlinePath := fmt.Sprintf("/proc/%d/cmdline", pid)
-	cmdline, err := ioutil.ReadFile(cmdlinePath)
+	cmdline, err := os.ReadFile(cmdlinePath)
 	if err != nil {
 		rsp.Message = fmt.Sprintf("failed to read %s: %s", cmdlinePath, err)
 		return nil
@@ -313,14 +324,14 @@ var reAllDigits = regexp.MustCompile(`^[0-9]+$`)
 
 func (c *Controller) listChildrenProcesses(ppid int) ([]int, error) {
 	var children []int
-	fis, err := ioutil.ReadDir("/proc")
+	fis, err := os.ReadDir("/proc")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read dir /proc: %s", err)
 	}
 	for _, fi := range fis {
 		if fi.IsDir() && reAllDigits.MatchString(filepath.Base(fi.Name())) {
 			pidS := filepath.Base(fi.Name())
-			statusBytes, err := ioutil.ReadFile(filepath.Join("/proc", pidS, "status"))
+			statusBytes, err := os.ReadFile(filepath.Join("/proc", pidS, "status"))
 			if err != nil {
 				continue
 			}

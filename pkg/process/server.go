@@ -2,13 +2,15 @@ package process
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/rpc"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/sequix/sup/pkg/config"
@@ -29,6 +31,29 @@ func InitServer() {
 	logConfig := &config.G.ProgramConfig.Log
 
 	cmd := exec.Command(processConfig.Path, processConfig.Args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{}
+
+	if processConfig.User != "" {
+		uid, err := getUid(processConfig.User)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		if cmd.SysProcAttr.Credential == nil {
+			cmd.SysProcAttr.Credential = &syscall.Credential{}
+		}
+		cmd.SysProcAttr.Credential.Uid = uid
+	}
+
+	if processConfig.Group != "" {
+		gid, err := getGid(processConfig.Group)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		if cmd.SysProcAttr.Credential == nil {
+			cmd.SysProcAttr.Credential = &syscall.Credential{}
+		}
+		cmd.SysProcAttr.Credential.Gid = gid
+	}
 
 	supEnvs := os.Environ()
 	envsMap := make(map[string]string, len(supEnvs)+len(processConfig.Envs))
@@ -111,7 +136,7 @@ func removeNotUsingSocket(path string) error {
 	if (stat.Mode() & os.ModeSocket) == 0 {
 		return fmt.Errorf("not a socket file %s", path)
 	}
-	sockBytes, err := ioutil.ReadFile("/proc/net/unix")
+	sockBytes, err := os.ReadFile("/proc/net/unix")
 	if err != nil {
 		return fmt.Errorf("failed to read /proc/net/unix: %s", err)
 	}
@@ -159,4 +184,28 @@ func Serve(stop <-chan struct{}) {
 		}
 		go server.ServeConn(uc)
 	}
+}
+
+func getUid(username string) (uint32, error) {
+	u, err := user.Lookup(username)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get uid of user %q: %s", username, err)
+	}
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return 0, fmt.Errorf("invalid uid %q: %s", u.Uid, err)
+	}
+	return uint32(uid), nil
+}
+
+func getGid(group string) (uint32, error) {
+	g, err := user.LookupGroup(group)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get gid of group %q: %s", group, err)
+	}
+	gid, err := strconv.Atoi(g.Gid)
+	if err != nil {
+		return 0, fmt.Errorf("invalid gid %q: %s", g.Gid, err)
+	}
+	return uint32(gid), nil
 }

@@ -47,7 +47,7 @@ type FileWriter struct {
 	// is to retain all old log files.
 	maxAge time.Duration
 
-	// make aligncheck happy
+	// make align check happy
 	mu     sync.Mutex
 	backMu sync.Mutex
 	size   int64

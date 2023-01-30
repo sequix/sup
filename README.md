@@ -4,7 +4,7 @@
 # sup
 Supervisor for single process. Supports CLI, auto-restart, log-rotate-clean based both on time and size.
 
-A statically linked binary only and reduced size 1.59MiB with 'strip -s' and 'upx -9'.
+A statically linked binary only and reduced size less than 2MiB with 'strip -s' and 'upx -9'.
 
 You can download the binary [here](https://github.com/sequix/sup/releases).
 
@@ -12,16 +12,16 @@ You can download the binary [here](https://github.com/sequix/sup/releases).
 
 ```bash
 # Start Sup daemon
-$ ./sup -c config.toml
+$ nohup ./sup -c config.toml &
 
-# Using CLI
-$ ./sup -c config.toml start        # Start the process.
-$ ./sup -c config.toml stop         # Stop the process by sending SIGTERM(15).
-$ ./sup -c config.toml restart      # Equilevant to Stop & Start.
-$ ./sup -c config.toml reload       # Send SIGHUP(1) to the process.
-$ ./sup -c config.toml kill         # Send SIGKILL(9) to the process and all its child processes.
-$ ./sup -c config.toml status       # Show the process status.
-$ ./sup -c config.toml exit         # Exit the Sup daemon and the process.
+# Using CLI action
+$ ./sup -c config.toml start    # Start the process.
+$ ./sup -c config.toml stop     # Stop the process by sending SIGTERM(15) to it and all its child processes.
+$ ./sup -c config.toml restart  # Equivalent to Stop & Start.
+$ ./sup -c config.toml reload   # Send SIGHUP(1) to the process.
+$ ./sup -c config.toml kill     # Send SIGKILL(9) to the process and all its child processes.
+$ ./sup -c config.toml status   # Show the process status.
+$ ./sup -c config.toml exit     # Call stop action and exit the Sup daemon.
 
 # General directory format
 .
@@ -45,7 +45,7 @@ exec ./bin/flog -l
 
 # Content of flog.toml
 [sup]
-socket = "./sup.d/flog.sock"  # Recommand using absolute path in production.
+socket = "./sup.d/flog.sock"  # Recommend using absolute path in production.
 
 [program]
 [program.process]
@@ -88,6 +88,10 @@ autoStart = false
 startSeconds = 5
 # How to react when the supervised process went down. One of 'on-failure', 'always', 'none'. 'on-failure' by default.
 restartStrategy = "on-failure"
+# User of the supervised process. Inherited from sup by default.
+user = "root"
+# Group of the supervised process. Inherited from sup by default.
+group = "root"
 # Environment variables to the supervised process.
 [program.process.envs]
 ENV_VAR1 = "val1"
@@ -113,7 +117,7 @@ maxSize = 128
 
 1.Can I reload the config of sup itself?
 
-No. I recommand to use a config file for the program to leave the config of sup immutable.
+No. I recommend to use a config file for the program to leave the config of sup immutable.
 
 For those using command line flags (like [VictoriaMetrics](https://github.com/VictoriaMetrics/VictoriaMetrics)), write a bash shell with `exec` command to execute the actual program,
 
