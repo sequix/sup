@@ -7,28 +7,28 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - name: Setup Go
-        uses: actions/setup-go@v1
-        with:
-          go-version: 1.19
-        id: go
-
       - name: Code checkout
-        uses: actions/checkout@v1
+        uses: actions/checkout@v3
+
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '^1.19'
 
       - name: Build
         run: |
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o sup -trimpath -ldflags "-s -w -X 'github.com/sequix/sup/pkg/buildinfo.Commit=$(git rev-parse HEAD)'" cmd/main.go
 
       - name: Compress Binary
-        uses: crazy-max/ghaction-upx@v1
+        uses: crazy-max/ghaction-upx@v2
         with:
           version: v3.96
-          file: ./sup
+          files: |
+            ./sup
           args: --best -f
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: sup-nightly
           path: ./sup
