@@ -141,6 +141,12 @@ func (w *FileWriter) write(p []byte) (n int, err error) {
 
 	n, err = w.file.Write(p)
 	if err != nil {
+		if strings.Contains(err.Error(), "no space left on device") {
+			// when no space left no device, ignore this error
+			// so that the program can resume logging when the space is available again
+			n = len(p)
+			err = nil
+		}
 		return
 	}
 
